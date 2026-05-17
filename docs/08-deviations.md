@@ -32,7 +32,7 @@ Note v2: il target è passato da cloud (Gemini Vertex) a locale (FLUX.1-schnell,
 
 **Motivazione v1→v2**: con il target ora locale (originariamente FLUX.1 ~7 GB, ora FLUX.2-klein ~5 GB picco), mantenere anche il judge locale saturava i 16 GB M4. Spostare il judge in cloud libera tutta la RAM per FLUX. Le credenziali Vertex sono già necessarie per il judge — non aumentano la dipendenza cloud.
 
-**Costo Gemini come judge** (gennaio 2026): $0.15/$0.60 per 1M token input/output → ~$0.0007 per call → ~$0.45 per full run di 625 judge call. Trascurabile rispetto al target.
+**Costo Gemini 2.5 Pro come judge** (gennaio 2026): $1.25/$10.00 per 1M token input/output → ~$0.006 per call → ~$5.25 per full run di ~875 judge call (175 seed × ~5 iter media). Vedi `docs/04-components.md` §Costo Gemini per la stima dettagliata.
 
 **Fallback offline**: `--judge-backend mlx` (Qwen2.5-VL-7B locale) o `--judge-backend ollama` restano disponibili per test senza accesso rete.
 
@@ -321,7 +321,7 @@ v2 (attuale): **Gemini 2.5 Pro cloud è default** (`--judge-backend gemini`).
 **Conseguenze**:
 - Ollama `format:"json"` non più rilevante per il default path.
 - `OLLAMA_MAX_LOADED_MODELS=1` (solo attacker) — invariato.
-- Richiede autenticazione Vertex per il judge (stesse credenziali del target Vertex, se usato).
+- Richiede autenticazione Vertex per il judge (il target è locale FLUX, non usa Vertex).
 
 ### B.3 Scope ridotto a M0-M3 ✦ DEVIAZIONE
 

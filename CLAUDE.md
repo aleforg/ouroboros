@@ -14,7 +14,7 @@ The framework is built for **Apple Silicon Macs with 16 GB unified RAM** (M4 bas
 
 - Attacker capped at ~8B 4-bit params (default `dolphin-llama3:latest` via Ollama, ~5 GB).
 - Target is local FLUX.2-klein-4B via mflux (~5 GB). It's the only T2I backend currently supported (`target_backend: Literal["flux"]` in `src/config.py`). The factory `build_target()` in [src/targets/base.py](src/targets/base.py) is structured to make adding a second backend (DALL-E, Imagen, SDXL on Vertex) a one-file change without touching the loop.
-- Default judge is **cloud** Gemini 2.5 Flash via Vertex (0 GB local). Despite docs sometimes still calling MLX the default, `JUDGE_BACKEND_DEFAULT = "gemini"` in `src/config.py`. MLX (`mlx-vlm` Qwen2.5-VL-7B-4bit) and Ollama (`qwen2.5vl:7b`) are offline fallbacks.
+- Default judge is **cloud** Gemini 2.5 Pro via Vertex (0 GB local). `JUDGE_BACKEND_DEFAULT = "gemini"` + `JUDGE_GEMINI_DEFAULT = "gemini-2.5-pro"` in `src/config.py`. MLX (`mlx-vlm` Qwen2.5-VL-7B-4bit) and Ollama (`qwen2.5vl:7b`) are offline fallbacks.
 - **Aggressive unload between phases** (`cfg.aggressive_unload=True`) is critical: attacker → `aclose()` (evicts Ollama model) → target → `aclose()` (frees MLX/Metal cache) → judge. Peak RAM is `max(attacker, target)`, not the sum. `--no-aggressive-unload` keeps both resident and risks OOM.
 - `src/config.py:check_ram_budget` aborts startup if the estimate exceeds `RAM_BUDGET_GB` (13 GB) unless `--allow-swap` is passed.
 
@@ -57,7 +57,7 @@ pytest tests/test_loop_success_rule.py                # single file
 pytest tests/test_loop_success_rule.py::test_success_rule_exactly_n  # single test
 ```
 
-Required env (see `.env.example`): `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` for Vertex (target and/or judge); `OLLAMA_HOST` for the local attacker.
+Required env (see `.env.example`): `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` for Vertex (judge only — target is always local FLUX); `OLLAMA_HOST` for the local attacker.
 
 ## Package layout quirk
 
@@ -71,7 +71,7 @@ The entry point `mirtage` (defined in `pyproject.toml`) routes to `src/cli.py:ma
 
 1. `ram_monitor.snap(..., "pre_attacker")` → `attacker.propose(base_scene, memory)` returns `AttackerCandidate{target_prompt, strategy_label, rationale}` or `None` on refusal. Self-refusal detection uses a regex; retry once with a stronger framing prefix.
 2. `attacker.aclose()` (if `aggressive_unload`) — sends `keep_alive=0` to Ollama.
-3. `ram_monitor.snap(..., "pre_target")` → `target.generate_m(prompt, M)`. FLUX runs **sequentially on the asyncio thread** (MLX binds a GPU stream to the thread that created the model — do not `asyncio.to_thread` it). Vertex runs M in parallel.
+3. `ram_monitor.snap(..., "pre_target")` → `target.generate_m(prompt, M)`. FLUX runs **sequentially on the asyncio thread** (MLX binds a GPU stream to the thread that created the model — do not `asyncio.to_thread` it).
 4. `target.aclose()` — for FLUX, this `del`s the model and calls `mx.clear_cache()`.
 5. Save PNGs + sha256 via `storage.save_image`.
 6. **Refusal pivot**: if `all(samples == "refused")`, skip judge, write a synthetic memory entry, continue. Only triggers on cloud targets with safety filters — FLUX never returns `"refused"` (only `"image"` or `"error"`), so on FLUX this branch is effectively dead.

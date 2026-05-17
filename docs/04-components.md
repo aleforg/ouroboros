@@ -171,7 +171,7 @@ In v2.4 il backend Vertex è stato rimosso del tutto (la sua entry aveva un mode
 |---|---|---|---|---|---|
 | test (gender) | 2 | 2 | 5 | 20 | ~3-6 min |
 | test (tutti) | 10 | 2 | 5 | 100 | ~15-30 min |
-| full | 120 | 4 | 20 | 9600 | ~8-15 h |
+| full | 175 | 4 | 20 | 14000 | ~12-22 h |
 
 **Per un futuro target cloud (es. Imagen 4)**: tempo per call ~6 s × M parallele.
 Costi Imagen su Vertex AI (gennaio 2026, come riferimento di scala se/quando reintrodotto):
@@ -183,7 +183,7 @@ Costi Imagen su Vertex AI (gennaio 2026, come riferimento di scala se/quando rei
 | Imagen 4 Fast | $0.02 |
 | Imagen 3 Fast | $0.02 |
 
-Una full run realistica (~2500 T2I call) costerebbe ~$50-100 con Imagen 4 Standard, ~$30-50 con Imagen 4 Fast.
+Una full run realistica (~3500 T2I call, assumendo early-stop medio a ~5 iter) costerebbe ~$70-140 con Imagen 4 Standard, ~$35-70 con Imagen 4 Fast.
 
 ---
 
@@ -197,7 +197,7 @@ Riceve M immagini + il prompt + la base scene, e restituisce uno **score struttu
 
 | Backend | Flag | Modello | RAM locale | Note |
 |---|---|---|---|---|
-| **gemini** *(default)* | `--judge-backend gemini` | `gemini-2.5-pro` su Vertex AI | 0 GB | Stesse credenziali del target Vertex; reasoning VLM di alta qualità |
+| **gemini** *(default)* | `--judge-backend gemini` | `gemini-2.5-pro` su Vertex AI | 0 GB | Richiede credenziali Vertex (`GOOGLE_CLOUD_PROJECT`/`LOCATION`); reasoning VLM di alta qualità |
 | **mlx** *(offline)* | `--judge-backend mlx` | `mlx-community/Qwen2.5-VL-7B-Instruct-4bit` | ~5 GB | Nessun `format:json`, retry via prompt; Apple Silicon native |
 | **ollama** *(offline)* | `--judge-backend ollama` | `qwen2.5vl:7b` | ~5 GB | `format:"json"` disponibile; più lento di MLX |
 
@@ -253,7 +253,7 @@ Prezzi Vertex AI (gennaio 2026):
 - Output (JSON BiasJudgement): **$10.00 / 1M token**
 
 Per chiamata judge (M=4, immagini 512×512, JSON ~500 token in uscita): **~$0.006**.
-Una full run realistica (~625 chiamate judge) costa **~$3.75**. Costo contenuto a fronte della qualità di reasoning culturale.
+Una full run realistica sul dataset Stable Bias (175 seed × ~5 iter media = ~875 chiamate judge) costa **~$5.25**. Worst case senza early-stop (175 × max_iter=20 = 3500 chiamate) **~$21**. Costo contenuto a fronte della qualità di reasoning culturale.
 
 ### Punti deboli
 

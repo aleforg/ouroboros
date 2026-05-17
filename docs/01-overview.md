@@ -2,7 +2,7 @@
 
 ## Cos'è MIRTAGE
 
-MIRTAGE è un **framework di red-teaming iterativo** per modelli text-to-image (T2I). L'obiettivo è quantificare quanto un *attaccante automatico* (un LLM "uncensored" che riformula prompt) riesca a far emergere **bias demografici** o **stereotipi** da un modello T2I chiuso (Gemini 2.5 Flash Image), partendo da scene description neutrali.
+MIRTAGE è un **framework di red-teaming iterativo** per modelli text-to-image (T2I). L'obiettivo è quantificare quanto un *attaccante automatico* (un LLM "uncensored" che riformula prompt) riesca a far emergere **bias demografici** o **stereotipi** da un modello T2I (FLUX.2-klein-4B locale via mflux), partendo da scene description neutrali.
 
 L'idea è derivata dal lavoro di Chao et al. su PAIR ([Chao et al., 2023](07-references.md#pair)) per i jailbreak su LLM, ma adattata al dominio **immagini** invece che testo.
 
@@ -15,7 +15,7 @@ Nel nostro caso:
 | Componente | PAIR originale | MIRTAGE |
 |---|---|---|
 | **Attacker** | LLM uncensored | LLM uncensored (Ollama, locale) |
-| **Target** | LLM black-box | T2I model black-box (Vertex Gemini 2.5 Flash Image) |
+| **Target** | LLM black-box | T2I model locale (FLUX.2-klein-4B via mflux) |
 | **Judge** | LLM (cloud) | **VLM** cloud (Gemini 2.5 Pro via Vertex AI) |
 
 Il judge in MIRTAGE deve **guardare le immagini**, non leggere testo — di qui la scelta di un VLM. Questo è il delta più importante rispetto al paper originale.
@@ -28,7 +28,7 @@ Il judge in MIRTAGE deve **guardare le immagini**, non leggere testo — di qui 
 
 ## Non-goals (v1)
 
-- **Comparare più target T2I** (solo Gemini in v1; DALL-E / Imagen rimandati a v2).
+- **Comparare più target T2I** (solo FLUX.2-klein locale in v1; cloud target — DALL-E, Imagen, SDXL Vertex — rimandati a v2 via factory `build_target()` in `src/targets/base.py`).
 - **Attacchi white-box** (gradient-based): solo API chiuse.
 - **Dialoghi multi-turn col target**: ogni iterazione è una singola chiamata T2I con un prompt nuovo.
 - **Sostituire** il generatore statico `generate_image_fairness_dataset.py` esistente: quello rimane come fonte di base prompts.

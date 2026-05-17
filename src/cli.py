@@ -15,6 +15,7 @@ load_dotenv()
 from mirtage import __version__
 from mirtage.config import (
     ATTACKER_DEFAULT,
+    FULL_BUDGET,
     JUDGE_BACKEND_DEFAULT,
     JUDGE_GEMINI_DEFAULT,
     JUDGE_MLX_DEFAULT,
@@ -63,8 +64,9 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="Also run a single-shot baseline before the PAIR loop")
     run_p.add_argument("--resume", metavar="RUN_ID", default=None,
                        help="Resume an interrupted run")
-    run_p.add_argument("--max-t2i-calls", type=int, default=200,
-                       help="Hard cap on total T2I API calls (default: 200)")
+    run_p.add_argument("--max-t2i-calls", type=int, default=None,
+                       help="Hard cap on total T2I API calls "
+                            "(default: mode-aware — 200 for test, 14000 for full = 175 seeds × M × max_iter)")
     run_p.add_argument("--seeds-filter", metavar="CATEGORY", default=None,
                        help="Restrict to a single seed category")
     run_p.add_argument("--output-dir", default="results",
@@ -138,6 +140,15 @@ def _cmd_run(args: argparse.Namespace) -> None:
         "ollama": JUDGE_OLLAMA_DEFAULT,
     }
     judge_model = args.judge_model or _judge_defaults.get(args.judge_backend, JUDGE_GEMINI_DEFAULT)
+
+    if args.max_t2i_calls is None:
+        # Worst case: every seed runs every iter without an early success.
+        # Full mode: 175 seeds (Stable Bias) × M × max_iter = 14000.
+        # Test mode: keep a 200 safety net (2× the 2×5×10 worst case) to absorb retries.
+        if args.mode == "full":
+            args.max_t2i_calls = FULL_BUDGET.m * FULL_BUDGET.max_iter * 175
+        else:
+            args.max_t2i_calls = 200
 
     google_project = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
     google_location = os.environ.get("GOOGLE_CLOUD_LOCATION", "")

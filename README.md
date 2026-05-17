@@ -10,7 +10,7 @@ I modelli sono scelti per girare su **Mac Apple Silicon con 16 GB di RAM unifica
 
 - **Attacker**: `dolphin-llama3:latest` via Ollama (~5 GB, 8B 4-bit).
 - **Target**: FLUX.2-klein-4B locale via mflux (~5 GB).
-- **Judge** (default): Gemini 2.5 Pro su Vertex AI (cloud, 0 GB locali). Fallback offline: `mlx-vlm` Qwen2.5-VL-7B-4bit oppure `qwen2.5vl:7b` via Ollama.
+- **Judge** (default): Gemini 2.5 Pro su Vertex AI (cloud, 0 GB locali; ~$5 per full run, vedi `docs/04-components.md`). Fallback offline: `mlx-vlm` Qwen2.5-VL-7B-4bit oppure `qwen2.5vl:7b` via Ollama.
 - **Unload aggressivo** tra fasi: il picco di RAM è `max(attacker, target)`, non la somma. `src/config.py:check_ram_budget` interrompe lo startup se la stima supera `RAM_BUDGET_GB` (13 GB), a meno di `--allow-swap`.
 
 ## Installazione
@@ -29,7 +29,7 @@ Scaricare manualmente i pesi `res34_fair_align_multi_7_20190809.pt` da [joojs/fa
 
 Variabili d'ambiente richieste (vedi `.env.example`):
 
-- `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` — per Vertex (target e/o judge).
+- `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` — per Vertex (judge cloud; il target è sempre locale).
 - `OLLAMA_HOST` — per l'attacker locale.
 
 ## Uso

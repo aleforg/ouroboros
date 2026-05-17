@@ -26,7 +26,7 @@ Il paper originale del **PAIR loop**. Definisce il tre-attori framework attacker
 arXiv:2312.02119.
 🔗 https://arxiv.org/abs/2312.02119
 
-Estensione tree-search di PAIR con pruning. Per ogni iter genera b candidati invece di 1, un evaluator pota i meno promettenti, scende solo i rami sopravvissuti. **MIRTAGE è esplicitamente PAIR (no branching), non TAP** — la motivazione è il costo T2I, ogni branch aggiuntivo costa M chiamate Vertex (vedi [03-pair-loop.md](03-pair-loop.md#differenze-rispetto-a-tap-mehrotra-et-al-2023)).
+Estensione tree-search di PAIR con pruning. Per ogni iter genera b candidati invece di 1, un evaluator pota i meno promettenti, scende solo i rami sopravvissuti. **MIRTAGE è esplicitamente PAIR (no branching), non TAP** — la motivazione è il costo T2I, ogni branch aggiuntivo costa M chiamate al target (vedi [03-pair-loop.md](03-pair-loop.md#differenze-rispetto-a-tap-mehrotra-et-al-2023)).
 
 ### GCG (per contesto storico)
 
@@ -63,7 +63,7 @@ Proceedings of FAccT 2021. arXiv:2101.11718.
 
 Dataset di prompt seed estratti da Wikipedia su 5 demographic axes (gender, race, profession, religion, ideologia politica). Usato per **arricchire visivamente** i prompt CLEAR-Bias con scene anchor + visual attributes (vedi [05-dataset.md](05-dataset.md#bold-dhamala-et-al-2021)).
 
-**Cosa abbiamo preso:** scene anchor e visual attributes per i 120 prompt full mode.
+**Cosa abbiamo preso:** scene anchor e visual attributes per i 120 prompt del vecchio full mode CLEAR-Bias × BOLD (dismesso in v2.5, vedi [05-dataset.md](05-dataset.md#dataset-legacy)).
 **Cosa NON abbiamo preso:** le metriche di bias proposte dal paper (Sentiment, Regard, Toxicity) — operano su testo, non su immagini.
 
 ### StereoSet (referenza ulteriore)
@@ -142,13 +142,22 @@ Audit Stable Diffusion / DALL-E 2 con BLIP-VQA marker rate + cluster entropy + *
 
 ## Modelli usati
 
-### Gemini 2.5 Flash Image (target)
+### FLUX.2 klein (target)
+
+**Black Forest Labs (2024).**
+FLUX.2 klein — distilled 4B-parameter rectified-flow T2I model.
+🔗 https://github.com/black-forest-labs/flux
+🔗 mflux (Apple Silicon port): https://github.com/filipstrand/mflux
+
+Modello T2I locale, eseguito via [`mflux`](https://github.com/filipstrand/mflux) su Apple Silicon (MLX/Metal). MIRTAGE lo usa quantizzato a 4-bit con 4 inference step (variante "klein" distilled) per stare nel budget RAM. Generazione sequenziale sul thread asyncio (MLX binda lo stream GPU al thread). Vedi [04-components.md](04-components.md) per la motivazione della scelta (RAM, no safety filter, no costo cloud).
+
+### Gemini 2.5 Pro (judge)
 
 **Google DeepMind (2025).**
-Gemini 2.5 Flash Image documentation.
-🔗 https://cloud.google.com/vertex-ai/generative-ai/docs/image/generate-images
+Gemini 2.5 Pro documentation.
+🔗 https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-pro
 
-Modello chiuso. No paper accademico diretto (è un product release). Disponibile via Vertex AI con auth `GOOGLE_GENAI_USE_VERTEXAI=True`.
+Modello VLM cloud chiuso, disponibile via Vertex AI con auth `GOOGLE_GENAI_USE_VERTEXAI=True`. MIRTAGE lo usa come **judge default** (`--judge-backend gemini`, `JUDGE_GEMINI_DEFAULT="gemini-2.5-pro"` in `src/config.py`) — riceve M immagini + prompt e produce un JSON `BiasJudgement`. Pricing $1.25/$10.00 per 1M token input/output → ~$0.006 per call → ~$5 per full run su Stable Bias (175 seed, vedi `docs/04-components.md`).
 
 ### Qwen2.5-VL (judge fallback offline)
 
