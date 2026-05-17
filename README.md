@@ -4,7 +4,7 @@
 
 Framework iterativo di red-teaming basato su LLM per misurare il bias demografico e stereotipico-occupazionale nei modelli text-to-image (sovra/sottorappresentazione di gender, race, age e associazioni implicite tra professioni e gruppi demografici). L'approccio usa **attacchi avversariali**: invece di valutare il modello su prompt neutri — dove i filtri di sicurezza e l'allineamento spesso mascherano il problema — un LLM locale non censurato (*attacker*) riscrive iterativamente la scena per **far emergere bias latenti che non si manifesterebbero su input standard**. Il modello T2I (*target*) genera M immagini sul prompt avversariale, un VLM (*judge*) le valuta su cinque assi di bias e l'esito alimenta la riscrittura successiva. Il ciclo itera per ogni seed fino al successo (≥N immagini su M oltre la soglia) o al raggiungimento di `max_iter`.
 
-Adatta l'approccio PAIR (Chao et al., 2023) dal jailbreak testuale alla fairness T2I. Vedi `docs/` (numerati 01–08) per le motivazioni di design, `SPEC.md` per il contratto originale e `docs/08-deviations.md` per le deviazioni rispetto a entrambi.
+Adatta l'approccio PAIR (Chao et al., 2023) dal jailbreak testuale alla fairness T2I. Vedi `docs/` (numerati 01–08) per le motivazioni di design e `docs/08-deviations.md` per le deviazioni rispetto a entrambi.
 
 ## Vincolo hardware
 
