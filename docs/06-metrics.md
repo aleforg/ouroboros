@@ -362,7 +362,7 @@ flowchart LR
     E --> F[Per cluster:<br/>centroid medoid<br/>= cluster_name]
     F --> G[strategy_clusters.json]
     G --> H[merge with run_df]
-    H --> I[E(s) per cluster]
+    H --> I["E(s) per cluster"]
 ```
 
 Step-by-step:
