@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MIRTAGE Report — {{ run_id }}</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; color: #111; background: #f9f9f9; }
+  h1 { font-size: 1.5rem; border-bottom: 2px solid #333; padding-bottom: .5rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; color: #333; border-left: 4px solid #4a90e2; padding-left: .6rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; background: #fff; }
+  th { background: #4a90e2; color: #fff; padding: .4rem .7rem; text-align: left; font-size: .8rem; }
+  td { padding: .35rem .7rem; font-size: .8rem; border-bottom: 1px solid #e0e0e0; }
+  tr:hover td { background: #f0f4ff; }
+  .badge-success { background: #2ecc71; color: #fff; border-radius: 3px; padding: 1px 6px; font-size: .75rem; }
+  .badge-fail { background: #e74c3c; color: #fff; border-radius: 3px; padding: 1px 6px; font-size: .75rem; }
+  .badge-refused { background: #95a5a6; color: #fff; border-radius: 3px; padding: 1px 6px; font-size: .75rem; }
+  .thumb-grid { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+  .thumb-grid img { width: 140px; height: 140px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; }
+  .meta-box { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 1rem; font-size: .8rem; }
+  .meta-box dt { font-weight: bold; float: left; clear: left; width: 180px; }
+  .meta-box dd { margin-left: 190px; margin-bottom: .3rem; }
+  .gap-note { background: #fffbe6; border: 1px solid #f0c040; border-radius: 4px; padding: .6rem 1rem; font-size: .8rem; margin-bottom: 1rem; }
+  .chart-box { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: .8rem; margin: 1rem 0; }
+  .small-note { color: #666; font-size: .75rem; margin-top: .3rem; }
+  .num { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<h1>MIRTAGE Report</h1>
+<div class="meta-box">
+  <dl>
+    <dt>Run ID</dt><dd>{{ run_id }}</dd>
+    <dt>Mode</dt><dd>{{ meta.config.mode }}</dd>
+    <dt>Attacker</dt><dd>{{ meta.attacker_model }}</dd>
+    <dt>Judge</dt><dd>{{ meta.judge_backend }} / {{ meta.judge_model }}</dd>
+    <dt>Started</dt><dd>{{ meta.started_at }}</dd>
+    <dt>Ended</dt><dd>{{ meta.ended_at or "—" }}</dd>
+  </dl>
+</div>
+
+{% if baseline_vs_iter %}
+<h2>Baseline vs Iterative Attacker</h2>
+<table>
+  <tr>
+    <th>Metric</th><th>Value</th>
+  </tr>
+  {% for k, v in baseline_vs_iter.items() %}
+  <tr><td>{{ k }}</td><td class="num">{{ v }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Per-Category Summary</h2>
+<table>
+  <tr>
+    <th>Category</th>
+    <th>Seeds</th>
+    <th>Iters</th>
+    <th>ASR [95% bootstrap CI]</th>
+    <th>Q-to-Success<br/><span style="font-weight:normal;font-size:.7rem;">mean±std · median (IQR)</span></th>
+    <th>Max Bias (mean±std)</th>
+    <th>Refusal</th>
+  </tr>
+  {% for row in per_category %}
+  <tr>
+    <td>{{ row.category }}</td>
+    <td class="num">{{ row.n_seeds }}</td>
+    <td class="num">{{ row.n_iters }}</td>
+    <td class="num">
+      {{ row.asr }}
+      {% if row.asr_ci_low is not none %}
+      <span style="color:#888;">[{{ row.asr_ci_low }}, {{ row.asr_ci_high }}]</span>
+      {% endif %}
+    </td>
+    <td class="num">
+      {% if row.mean_queries_to_success is not none %}
+        {{ row.mean_queries_to_success }} ± {{ row.std_queries_to_success }}
+        <span style="color:#888;">· {{ row.median_queries_to_success }} ({{ row.iqr_queries_to_success }})</span>
+      {% else %}—{% endif %}
+    </td>
+    <td class="num">
+      {% if row.mean_max_bias_score is not none %}
+        {{ row.mean_max_bias_score }} ± {{ row.std_max_bias_score }}
+      {% else %}—{% endif %}
+    </td>
+    <td class="num">{{ row.refusal_rate }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if fairface_rows %}
+<h2>Demographic Skew (FairFace classifier)</h2>
+<table>
+  <tr>
+    <th rowspan="2">Category</th>
+    <th rowspan="2">Images</th>
+    <th rowspan="2">With faces</th>
+    <th rowspan="2">Faces</th>
+    <th colspan="2">Gender (K=2)</th>
+    <th colspan="2">Race (K=7)</th>
+    <th colspan="2">Age (K=9)</th>
+  </tr>
+  <tr>
+    <th>KL (nats)</th><th>H/log K</th>
+    <th>KL (nats)</th><th>H/log K</th>
+    <th>KL (nats)</th><th>H/log K</th>
+  </tr>
+  {% for row in fairface_rows %}
+  <tr>
+    <td>{{ row.category }}</td>
+    <td class="num">{{ row.n_images }}</td>
+    <td class="num">{{ row.n_with_faces }}</td>
+    <td class="num">{{ row.n_faces_total }}</td>
+    <td class="num">{% if row.kl_gender_nats is not none %}{{ row.kl_gender_nats }}{% else %}—{% endif %}</td>
+    <td class="num">{% if row.norm_entropy_gender is not none %}{{ row.norm_entropy_gender }}{% else %}—{% endif %}</td>
+    <td class="num">{% if row.kl_race_nats is not none %}{{ row.kl_race_nats }}{% else %}—{% endif %}</td>
+    <td class="num">{% if row.norm_entropy_race is not none %}{{ row.norm_entropy_race }}{% else %}—{% endif %}</td>
+    <td class="num">{% if row.kl_age_nats is not none %}{{ row.kl_age_nats }}{% else %}—{% endif %}</td>
+    <td class="num">{% if row.norm_entropy_age is not none %}{{ row.norm_entropy_age }}{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+<div class="small-note">
+  KL divergence vs. uniform with Laplace smoothing (α=1). Higher KL = more demographic skew.
+  Normalized entropy H/log K ∈ [0, 1]: 1 = perfectly balanced, 0 = degenerate (all faces in one bucket).
+  Classifier: FairFace ResNet-34 (Karkkainen &amp; Joo, WACV 2021); detector: MTCNN.
+  Limitations: FairFace is trained on photographic faces — accuracy drops on stylized/cartoon T2I output.
+</div>
+{% endif %}
+
+{% if asr_chart_svg %}
+<h2>Attack Saturation: ASR vs Iteration Budget</h2>
+<div class="chart-box">
+  {{ asr_chart_svg }}
+  <div class="small-note">
+    ASR(k) = fraction of seeds that succeed within k attacker iterations.
+    A flat curve early means most successes happen on the first few attempts;
+    a curve still climbing at max_iter suggests the budget may be too low.
+  </div>
+</div>
+{% endif %}
+
+{% if variance_rows %}
+<h2>Intra-Batch Variance (per category)</h2>
+<table>
+  <tr>
+    <th>Category</th><th>Iters Measured</th><th>Mean σ(per-image scores)</th><th>Std of that σ</th>
+  </tr>
+  {% for r in variance_rows %}
+  <tr>
+    <td>{{ r.category }}</td>
+    <td class="num">{{ r.n_iters_measured }}</td>
+    <td class="num">{{ r.mean_intra_batch_std }}</td>
+    <td class="num">{{ r.std_intra_batch_std }}</td>
+  </tr>
+  {% endfor %}
+</table>
+<div class="small-note">
+  Low intra-batch σ ⇒ bias is consistent across the M generated images for the same prompt (robust signal).
+  High σ ⇒ success may be driven by one lucky sample (less trustworthy).
+</div>
+{% endif %}
+
+<h2>Seed Summary</h2>
+<table>
+  <tr>
+    <th>Seed ID</th>
+    <th>Category</th>
+    <th>Outcome</th>
+    <th>Iters to Success</th>
+    <th>Max Bias Score</th>
+    <th>Winning Strategy</th>
+  </tr>
+  {% for row in summary %}
+  <tr>
+    <td>{{ row.seed_id }}</td>
+    <td>{{ row.category }}</td>
+    <td>
+      {% if row.outcome == "success" %}<span class="badge-success">success</span>
+      {% elif row.outcome == "refused" %}<span class="badge-refused">refused</span>
+      {% else %}<span class="badge-fail">fail</span>{% endif %}
+    </td>
+    <td class="num">{{ row.iters_to_success or "—" }}</td>
+    <td class="num">{{ row.max_bias_score }}</td>
+    <td>{{ row.winning_strategy or "—" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if clusters %}
+<h2>Strategy Clusters — E(s)</h2>
+<table>
+  <tr>
+    <th>Cluster ID</th><th>Representative Label</th><th>Attempts</th><th>Successes</th><th>E(s)</th>
+  </tr>
+  {% for row in clusters %}
+  <tr>
+    <td>{{ row.cluster_id }}</td>
+    <td>{{ row.cluster_name }}</td>
+    <td class="num">{{ row.n_attempts }}</td>
+    <td class="num">{{ row.n_success }}</td>
+    <td class="num">{{ row.success_rate }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if thumbs_by_category %}
+<h2>Top-Scoring Image Thumbnails</h2>
+{% for cat, img_paths in thumbs_by_category.items() %}
+<h3 style="font-size:.9rem; margin-top:1rem;">{{ cat }}</h3>
+<div class="thumb-grid">
+  {% for p in img_paths %}<img src="{{ p }}" alt="bias image">{% endfor %}
+</div>
+{% endfor %}
+{% endif %}
+
+<p style="font-size:.7rem; color:#888; margin-top:3rem;">
+  Generated by MIRTAGE v{{ version }} · {{ generated_at }}
+</p>
+</body>
+</html>
