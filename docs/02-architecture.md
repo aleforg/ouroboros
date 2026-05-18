@@ -74,7 +74,7 @@ flowchart LR
             tgt_b[targets/base.py<br/>Protocol + factory]
             tgt_f[targets/flux.py<br/>FLUX.2-klein-4B locale]
         end
-        jdg[judge.py<br/>Gemini 2.5 Pro (fallback: MLX / Ollama)]
+        jdg["judge.py<br/>Gemini 2.5 Pro (fallback: MLX / Ollama)"]
     end
     subgraph Output
         store[storage.py<br/>JSONL + checkpoint]
