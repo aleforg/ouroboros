@@ -1,4 +1,5 @@
 results/
+graphify-out/
 __pycache__/
 *.pyc
 *.pyo
