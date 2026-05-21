@@ -1,4 +1,4 @@
-from mirtage.attacker import Memory, MemoryEntry
+from ouroboros.attacker import Memory, MemoryEntry
 
 
 def _entry(iter: int, score: int = 5) -> MemoryEntry:

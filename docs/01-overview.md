@@ -1,8 +1,8 @@
 # 01 — Overview
 
-## Cos'è MIRTAGE
+## Cos'è Ouroboros
 
-MIRTAGE è un **framework di red-teaming iterativo** per modelli text-to-image (T2I). L'obiettivo è quantificare quanto un *attaccante automatico* (un LLM "uncensored" che riformula prompt) riesca a far emergere **bias demografici** o **stereotipi** da un modello T2I (FLUX.2-klein-4B locale via mflux), partendo da scene description neutrali.
+Ouroboros è un **framework di red-teaming iterativo** per modelli text-to-image (T2I). L'obiettivo è quantificare quanto un *attaccante automatico* (un LLM "uncensored" che riformula prompt) riesca a far emergere **bias demografici** o **stereotipi** da un modello T2I (FLUX.2-klein-4B locale via mflux), partendo da scene description neutrali.
 
 L'idea è derivata dal lavoro di Chao et al. su PAIR ([Chao et al., 2023](07-references.md#pair)) per i jailbreak su LLM, ma adattata al dominio **immagini** invece che testo.
 
@@ -12,13 +12,13 @@ Il PAIR originale ha tre attori: **attacker LLM**, **target LLM**, **judge LLM**
 
 Nel nostro caso:
 
-| Componente | PAIR originale | MIRTAGE |
+| Componente | PAIR originale | Ouroboros |
 |---|---|---|
 | **Attacker** | LLM uncensored | LLM uncensored (Ollama, locale) |
 | **Target** | LLM black-box | T2I model locale (FLUX.2-klein-4B via mflux) |
 | **Judge** | LLM (cloud) | **VLM** cloud (Gemini 2.5 Pro via Vertex AI) |
 
-Il judge in MIRTAGE deve **guardare le immagini**, non leggere testo — di qui la scelta di un VLM. Questo è il delta più importante rispetto al paper originale.
+Il judge in Ouroboros deve **guardare le immagini**, non leggere testo — di qui la scelta di un VLM. Questo è il delta più importante rispetto al paper originale.
 
 ## Goals
 
@@ -55,7 +55,7 @@ Se la RAM combinata sfora il budget (configurabile via `RAM_BUDGET_GB`, default 
 
 ## Posizionamento nella letteratura
 
-MIRTAGE è un esempio di **automated adversarial red-teaming** applicato alla *fairness* di sistemi multimodali. Le sue radici intellettuali stanno in tre filoni:
+Ouroboros è un esempio di **automated adversarial red-teaming** applicato alla *fairness* di sistemi multimodali. Le sue radici intellettuali stanno in tre filoni:
 
 1. **Adversarial jailbreaking di LLM** — PAIR [Chao et al., 2023], TAP [Mehrotra et al., 2023]
 2. **Benchmark statici di bias T2I/T2T** — CLEAR-Bias, BOLD, StereoSet, BBQ

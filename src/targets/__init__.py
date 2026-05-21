@@ -7,14 +7,14 @@ added by dropping a new module in this package and wiring it into
 `build_target()` in base.py.
 """
 
-from mirtage.targets.base import (
+from ouroboros.targets.base import (
     RateLimiter,
     SampleResult,
     TargetBackend,
     backoff_wait,
     build_target,
 )
-from mirtage.targets.flux import FluxLocalTarget
+from ouroboros.targets.flux import FluxLocalTarget
 
 __all__ = [
     "RateLimiter",

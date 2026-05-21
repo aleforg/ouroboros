@@ -1,4 +1,4 @@
-from mirtage.seeds import (
+from ouroboros.seeds import (
     ALLOWED_CATEGORIES,
     Seed,
     _transform,

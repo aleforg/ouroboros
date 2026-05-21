@@ -1,6 +1,6 @@
-"""FairFace-based demographic bias metrics for MIRTAGE.
+"""FairFace-based demographic bias metrics for Ouroboros.
 
-Post-hoc pipeline invoked by `mirtage report`. For each image under
+Post-hoc pipeline invoked by `ouroboros report`. For each image under
 `<run_dir>/images/`, runs MTCNN face detection + FairFace ResNet-34
 classification, writes one JSONL row per detected face to
 `<run_dir>/fairface.jsonl`, then aggregates per-category KL-divergence
@@ -242,9 +242,9 @@ _LABEL_NORMALIZE: dict[str, str] = {
 # res34_fair_align_multi_7_20190809.pt — ~85 MB, originally hosted on Google
 # Drive). User downloads this manually once.
 DEFAULT_WEIGHTS_PATH = (
-    Path(os.environ.get("MIRTAGE_FAIRFACE_WEIGHTS", ""))
-    if os.environ.get("MIRTAGE_FAIRFACE_WEIGHTS")
-    else Path.home() / ".cache" / "mirtage" / "fairface" / "res34_fair_align_multi_7_20190809.pt"
+    Path(os.environ.get("OUROBOROS_FAIRFACE_WEIGHTS", ""))
+    if os.environ.get("OUROBOROS_FAIRFACE_WEIGHTS")
+    else Path.home() / ".cache" / "ouroboros" / "fairface" / "res34_fair_align_multi_7_20190809.pt"
 )
 
 # MTCNN-based detector: face crop is expanded by 25% on each side (matching
@@ -286,7 +286,7 @@ def _load_models(weights_path: Path | None = None) -> None:
             f"FairFace weights not found at {wpath}.\n"
             "Download res34_fair_align_multi_7_20190809.pt from "
             "https://github.com/joojs/fairface (Pretrained Models section) "
-            f"and place it at the path above, or set MIRTAGE_FAIRFACE_WEIGHTS "
+            f"and place it at the path above, or set OUROBOROS_FAIRFACE_WEIGHTS "
             f"to point at the file."
         )
 
@@ -389,9 +389,10 @@ def classify(face_pil: Any, weights_path: Path | None = None) -> dict[str, str]:
 def _load_image_index(run_dir: Path) -> dict[str, dict]:
     """Build image_path → (seed_id, category, iter, sample_idx) map from run.jsonl.
 
-    Only considers the iterative loop's run.jsonl. baseline.jsonl is ignored
-    because it currently shares the iter_00 path namespace with the loop's
-    first iteration (overwrite collision is a separate upstream issue).
+    Only considers the iterative loop's run.jsonl. baseline.jsonl is ignored:
+    baseline images live under their own images/<seed>/baseline/ namespace
+    (see storage.save_image), so there is no longer a path collision with the
+    loop's iter_00 — they are simply out of scope for the FairFace pipeline.
     """
     import json
 

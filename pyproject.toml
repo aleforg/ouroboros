@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mirtage"
+name = "ouroboros"
 version = "0.1.0"
 description = "Multimodal Iterative Red Teaming for Adversarial Generative-AI Evaluation"
 requires-python = ">=3.10"
@@ -30,22 +30,22 @@ dev = [
     "pytest-asyncio>=0.23",
 ]
 fairface = [
-    # Required to run the post-hoc demographic skew pipeline (`mirtage report`).
+    # Required to run the post-hoc demographic skew pipeline (`ouroboros report`).
     # Pesi separati: scaricare res34_fair_align_multi_7_20190809.pt da
-    # https://github.com/joojs/fairface in ~/.cache/mirtage/fairface/
+    # https://github.com/joojs/fairface in ~/.cache/ouroboros/fairface/
     "torch>=2.1",
     "torchvision>=0.16",
     "facenet-pytorch>=2.5",
 ]
 
 [project.scripts]
-mirtage = "mirtage.cli:main"
+ouroboros = "ouroboros.cli:main"
 
 [tool.setuptools]
-packages = ["mirtage"]
+packages = ["ouroboros"]
 
 [tool.setuptools.package-dir]
-mirtage = "src"
+ouroboros = "src"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

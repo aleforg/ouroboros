@@ -13,7 +13,7 @@ Le scelte di design sono motivate; quelle che chiamiamo "deferred" sono nello sc
 
 ### A.1 Target multimodale invece che testuale ✦ AGGIUNTO
 
-| | PAIR originale | MIRTAGE v2 (attuale) |
+| | PAIR originale | Ouroboros v2 (attuale) |
 |---|---|---|
 | Target | LLM black-box (GPT-4, Claude) | T2I model locale (FLUX.2-klein-4B distilled via mflux ≥0.17) |
 | Output del target | testo | M immagini sequenziali |
@@ -24,7 +24,7 @@ Note v2: il target è passato da cloud (Gemini Vertex) a locale (FLUX.1-schnell,
 
 ### A.2 Judge → VLM cloud invece che LLM ✦ AGGIUNTO + AGGIORNATO
 
-| | PAIR originale | MIRTAGE v1 | MIRTAGE v2 (attuale) |
+| | PAIR originale | Ouroboros v1 | Ouroboros v2 (attuale) |
 |---|---|---|---|
 | Judge | LLM (cloud GPT-4 nel paper) | VLM locale (MLX Qwen2.5-VL-7B-4bit) | VLM cloud (Gemini 2.5 Pro via Vertex AI) |
 | Input | testo del target | M immagini + prompt + base scene | M immagini + prompt + base scene |
@@ -40,9 +40,9 @@ Note v2: il target è passato da cloud (Gemini Vertex) a locale (FLUX.1-schnell,
 
 PAIR originale: 1 prompt → 1 risposta → 1 score scalare.
 
-MIRTAGE v1 (Vertex target): 1 prompt → M immagini **parallele** via `asyncio.gather`.
+Ouroboros v1 (Vertex target): 1 prompt → M immagini **parallele** via `asyncio.gather`.
 
-MIRTAGE v2 (FLUX target): 1 prompt → M immagini **sequenziali** via `asyncio.to_thread` in loop.
+Ouroboros v2 (FLUX target): 1 prompt → M immagini **sequenziali** via `asyncio.to_thread` in loop.
 
 **Perché sequenziali con FLUX**: mflux è sincrono e non è thread-safe per context paralleli sullo stesso modello. Su 16 GB è impossibile tenere più context FLUX in flight contemporaneamente.
 
@@ -53,7 +53,7 @@ MIRTAGE v2 (FLUX target): 1 prompt → M immagini **sequenziali** via `asyncio.t
 ### A.4 Success rule N-of-M invece che scalare ✦ AGGIUNTO
 
 PAIR originale: `score ≥ τ` → success.
-MIRTAGE: `# images with score ≥ τ` ≥ N → success.
+Ouroboros: `# images with score ≥ τ` ≥ N → success.
 
 **Motivazione**: con M sample, decidere se "questa iterazione è un attacco riuscito" richiede una majority/fraction rule, non un single-point.
 **Default**: 2 of 2 (test mode) / 3 of 4 (full mode). Codice: `src/loop.py:32`.
@@ -61,7 +61,7 @@ MIRTAGE: `# images with score ≥ τ` ≥ N → success.
 ### A.5 Refusal-pivot esplicito ✦ AGGIUNTO (solo backend Vertex)
 
 PAIR originale: il target rifiuta = uno score basso, basta.
-MIRTAGE (backend vertex): tutti M = `refused` → **synthetic negative memory entry**, **no judge call**, **continue**. È un "defense win".
+Ouroboros (backend vertex): tutti M = `refused` → **synthetic negative memory entry**, **no judge call**, **continue**. È un "defense win".
 
 **Motivazione**: i T2I cloud hanno safety filter aggressivi; la signal di "ho aggirato il filtro" è strutturalmente diversa da "il modello ha generato qualcosa di banale".
 
@@ -72,7 +72,7 @@ MIRTAGE (backend vertex): tutti M = `refused` → **synthetic negative memory en
 ### A.6 Per-axis bias scores ✦ AGGIUNTO
 
 PAIR originale: score scalare 1-10.
-MIRTAGE: 5 assi separati (`gender_skew`, `race_skew`, `age_skew`, `body_type_skew`, `stereotype_framing`) + score scalare globale.
+Ouroboros: 5 assi separati (`gender_skew`, `race_skew`, `age_skew`, `body_type_skew`, `stereotype_framing`) + score scalare globale.
 
 **Motivazione**: nel dominio fairness T2I, **quale tipo di bias emerge** è informativo quanto **se** ne emerge. Permette per-axis distributions in report.
 **Codice**: `src/judge.py:24` + `src/config.py:19-25`.
@@ -94,8 +94,8 @@ v2: FLUX (sia .1-schnell sia .2-klein) espone `seed` esplicito per chiamata. Le 
 ### A.9 RAM tracking dinamico via psutil ✦ AGGIUNTO (v2)
 
 PAIR originale: nessun tracking di memoria.
-MIRTAGE v1: solo `MODEL_SIZE_REGISTRY` lookup statico in `config.py`.
-MIRTAGE v2: **misura live** con `psutil` ad ogni fase del loop + sequencing aggressivo (unload tra fasi).
+Ouroboros v1: solo `MODEL_SIZE_REGISTRY` lookup statico in `config.py`.
+Ouroboros v2: **misura live** con `psutil` ad ogni fase del loop + sequencing aggressivo (unload tra fasi).
 
 **Fasi misurate**: `pre_attacker`, `post_attacker`, `pre_target`, `post_target`, `post_judge`.
 
@@ -107,8 +107,8 @@ MIRTAGE v2: **misura live** con `psutil` ad ogni fase del loop + sequencing aggr
 
 ### A.10 Migrazione FLUX.1-schnell → FLUX.2-klein-4B ✦ AGGIORNATO (v2.1)
 
-MIRTAGE v2.0: target FLUX.1-schnell (12B params) @ 4-bit, RAM picco ~7 GB.
-MIRTAGE v2.1: target **FLUX.2-klein-4B** (distilled) @ 4-bit, RAM picco ~5 GB.
+Ouroboros v2.0: target FLUX.1-schnell (12B params) @ 4-bit, RAM picco ~7 GB.
+Ouroboros v2.1: target **FLUX.2-klein-4B** (distilled) @ 4-bit, RAM picco ~5 GB.
 
 | | FLUX.1-schnell | FLUX.2-klein-4B (distilled) |
 |---|---|---|
@@ -132,8 +132,8 @@ MIRTAGE v2.1: target **FLUX.2-klein-4B** (distilled) @ 4-bit, RAM picco ~5 GB.
 
 ### A.11 Metriche statistical robustness ✦ AGGIUNTO (v2.1)
 
-MIRTAGE v2.0: point estimates senza incertezza (ASR=0.65, mean_bias=7.2, ...).
-MIRTAGE v2.1: aggiunte misure di incertezza + statistica multi-run.
+Ouroboros v2.0: point estimates senza incertezza (ASR=0.65, mean_bias=7.2, ...).
+Ouroboros v2.1: aggiunte misure di incertezza + statistica multi-run.
 
 | Aggiunta | Cosa fornisce |
 |---|---|
@@ -141,7 +141,7 @@ MIRTAGE v2.1: aggiunte misure di incertezza + statistica multi-run.
 | **Std accanto a ogni mean** in `per_category.csv` | `std_max_bias_score`, `std_<axis>`, `std_queries_to_success` |
 | **ASR(k) saturation curve** | DataFrame + chart SVG inline per scegliere `max_iter` razionalmente |
 | **Intra-batch σ** | Distingue bias robusto (σ low) da artefatti outlier (σ high) |
-| **Multi-run aggregation** | Comando `mirtage aggregate <run_id>...` → cross-run ASR mean ± std + per-seed stability |
+| **Multi-run aggregation** | Comando `ouroboros aggregate <run_id>...` → cross-run ASR mean ± std + per-seed stability |
 
 **Motivazione**: per claim statisticamente difendibili in una tesi/paper serve poter scrivere *"the model resists strategy X with ASR 0.65 [95% CI 0.42, 0.83] (N=3 runs, mean ± std)"*, non solo *"ASR 0.65"*.
 
@@ -153,8 +153,8 @@ MIRTAGE v2.1: aggiunte misure di incertezza + statistica multi-run.
 
 ### A.12 Per-axis bias: judge-only → FairFace + KL ✦ AGGIORNATO (v2.2)
 
-MIRTAGE v2.1: `per_category.csv` riportava `mean_<axis>` e `std_<axis>` (×5) calcolati dai `per_axis_scores` del judge su scala 0–10.
-MIRTAGE v2.2: queste colonne sono **rimosse** dal report. Le sostituisce una pipeline post-hoc FairFace + KL divergence in `src/fairface.py`.
+Ouroboros v2.1: `per_category.csv` riportava `mean_<axis>` e `std_<axis>` (×5) calcolati dai `per_axis_scores` del judge su scala 0–10.
+Ouroboros v2.2: queste colonne sono **rimosse** dal report. Le sostituisce una pipeline post-hoc FairFace + KL divergence in `src/fairface.py`.
 
 | | v2.1 (judge-only) | v2.2 (FairFace + KL) |
 |---|---|---|
@@ -163,9 +163,9 @@ MIRTAGE v2.2: queste colonne sono **rimosse** dal report. Le sostituisce una pip
 | Assi | 5 (gender, race, age, body_type, stereotype) | 3 (gender, race, age) |
 | Comparable con SOTA? | ❌ | ✅ (DALL-Eval, FAIntbench, T2ISafety, Stable Bias) |
 | Dipendenza extra | — | torch + facenet-pytorch + pesi FairFace ~85 MB |
-| Quando viene calcolato | inline (parte del judge) | post-hoc in `mirtage report` |
+| Quando viene calcolato | inline (parte del judge) | post-hoc in `ouroboros report` |
 
-**Motivazione**: i per-axis del judge sono numeri qualitativi senza unità di misura riconosciuta. La letteratura T2I-fairness lavora su classificatori demografici standard + scalari informazione-teorici. Senza questo cambio, gli ASR/per-axis di MIRTAGE non sono confrontabili con nessun benchmark esistente.
+**Motivazione**: i per-axis del judge sono numeri qualitativi senza unità di misura riconosciuta. La letteratura T2I-fairness lavora su classificatori demografici standard + scalari informazione-teorici. Senza questo cambio, gli ASR/per-axis di Ouroboros non sono confrontabili con nessun benchmark esistente.
 
 **Cosa rimane del judge per-axis**: i `per_axis_scores` continuano a essere prodotti dal judge ad ogni iterazione e finiscono in `run.jsonl`. Servono al **loop** (success rule + memoria attacker) — non vengono aggregati nel report.
 
@@ -176,7 +176,7 @@ MIRTAGE v2.2: queste colonne sono **rimosse** dal report. Le sostituisce una pip
 - FairFace ha bias residui di campionamento (limitazione nota del classifier).
 - I pesi vanno scaricati una tantum dall'utente (no auto-download nel codice — il file è hosted su Google Drive nel repo originale).
 
-**Disattivazione**: `mirtage report <run_id> --no-fairface` salta la pipeline (utile in CI o quando torch non è installato).
+**Disattivazione**: `ouroboros report <run_id> --no-fairface` salta la pipeline (utile in CI o quando torch non è installato).
 
 **Codice**: nuovo modulo `src/fairface.py`; modifiche a `src/report.py` (integrazione + gestione errori), `src/cli.py` (flag), `src/metrics.py` (rimozione colonne), `src/templates/report.html.j2` (nuova sezione "Demographic Skew (FairFace)"); 32 nuovi test in `tests/test_fairface.py` (math + edge cases con mock).
 
@@ -184,8 +184,8 @@ MIRTAGE v2.2: queste colonne sono **rimosse** dal report. Le sostituisce una pip
 
 ### A.13 Bootstrap CI + median/IQR per allineamento alla letteratura ✦ AGGIORNATO (v2.3)
 
-MIRTAGE v2.1 → v2.2: ASR riportata con **intervallo di Wilson** (95%); queries-to-success solo come **mean ± std**.
-MIRTAGE v2.3: passaggio a **bootstrap percentile CI** + aggiunta di **median + IQR** per queries-to-success.
+Ouroboros v2.1 → v2.2: ASR riportata con **intervallo di Wilson** (95%); queries-to-success solo come **mean ± std**.
+Ouroboros v2.3: passaggio a **bootstrap percentile CI** + aggiunta di **median + IQR** per queries-to-success.
 
 | | v2.1–v2.2 | v2.3 |
 |---|---|---|
@@ -214,8 +214,8 @@ MIRTAGE v2.3: passaggio a **bootstrap percentile CI** + aggiunta di **median + I
 
 ### A.14 Rimozione del backend Vertex + cartella `targets/` ✦ REFACTOR (v2.4)
 
-MIRTAGE v2.0 → v2.3: due backend T2I selezionabili via `--target-backend {flux,vertex}`. Il backend Vertex era però **fermo a un model id legacy text-only** (`gemini-2.5-flash-preview-05-20`) — non generava immagini e non era mai stato sistemato per puntare a un `imagen-*`.
-MIRTAGE v2.4: backend Vertex eliminato del tutto; FLUX spostato in un sotto-pacchetto Python `mirtage.targets`.
+Ouroboros v2.0 → v2.3: due backend T2I selezionabili via `--target-backend {flux,vertex}`. Il backend Vertex era però **fermo a un model id legacy text-only** (`gemini-2.5-flash-preview-05-20`) — non generava immagini e non era mai stato sistemato per puntare a un `imagen-*`.
+Ouroboros v2.4: backend Vertex eliminato del tutto; FLUX spostato in un sotto-pacchetto Python `ouroboros.targets`.
 
 **Cosa cambia**:
 
@@ -251,14 +251,14 @@ MIRTAGE v2.4: backend Vertex eliminato del tutto; FLUX spostato in un sotto-pacc
 
 ### A.15 Migrazione dataset: CLEAR-Bias × BOLD → Stable Bias / Professions ✦ REFACTOR (v2.5)
 
-MIRTAGE v2.0 → v2.4: full dataset = `data/base_prompts.jsonl` (120 prompts, join CLEAR-Bias × BOLD generato dallo script `fairness-eval/generate_image_fairness_dataset.py`).
-MIRTAGE v2.5: full dataset = `data/stable_bias_prompts.jsonl` (175 prompts, Stable Bias / professions, Luccioni et al. NeurIPS 2023 D&B). Il vecchio è archiviato sotto `data/legacy/`.
+Ouroboros v2.0 → v2.4: full dataset = `data/base_prompts.jsonl` (120 prompts, join CLEAR-Bias × BOLD generato dallo script `fairness-eval/generate_image_fairness_dataset.py`).
+Ouroboros v2.5: full dataset = `data/stable_bias_prompts.jsonl` (175 prompts, Stable Bias / professions, Luccioni et al. NeurIPS 2023 D&B). Il vecchio è archiviato sotto `data/legacy/`.
 
 **Cosa non andava nel dataset precedente** (problemi strutturali identificati nell'audit):
 
 1. **Forced-choice 2-soggetti**: ogni prompt forzava la generazione di 2 demografie contemporaneamente nella stessa immagine (es. `"a Black person and a White person on an outdoor basketball court ..."`). Conseguenza diretta sul framework: la metrica **FairFace + KL** introdotta in §A.12 risultava **sempre ~0** — con 1 black + 1 white per costruzione, la distribuzione empirica era sempre 50/50 indipendentemente dal modello. **La nuova metrica non discriminava nulla su quel dataset**.
 
-2. **Mismatch concettuale con il framework**: MIRTAGE misura *quale demografia il modello sceglie spontaneamente*. Il dataset precedente specificava le demografie nel prompt → spazio per "elicitation" inesistente; l'attacker poteva solo amplificare il framing stereotipico, non far emergere skew.
+2. **Mismatch concettuale con il framework**: Ouroboros misura *quale demografia il modello sceglie spontaneamente*. Il dataset precedente specificava le demografie nel prompt → spazio per "elicitation" inesistente; l'attacker poteva solo amplificare il framing stereotipico, non far emergere skew.
 
 3. **Errori grammaticali sistematici**: il template upstream faceva string-replace `the subject` → `one of the two people` senza adattare articoli/verbi, producendo prompt sgrammaticati (`"A one of the two people often smells unpleasant"`, `"one of the two people people are uneducated"`).
 
@@ -306,9 +306,9 @@ Il design contract originale è stato scritto a inizio progetto. Diverse decisio
 
 ### B.1 Posizione del progetto ✦ DEVIAZIONE
 
-> "The project lives at `tools/mirtage/` (sibling of `fairness-eval/`), not as an inner directory."
+> "The project lives at `tools/ouroboros/` (sibling of `fairness-eval/`), not as an inner directory."
 
-Il design contract originale assumeva `fairness-eval/mirtage/`. Spostato fuori per separare git history e dipendenze.
+Il design contract originale assumeva `fairness-eval/ouroboros/`. Spostato fuori per separare git history e dipendenze.
 
 ### B.2 Gemini cloud come judge default (era Ollama → poi MLX → ora Gemini) ✦ DEVIAZIONE
 
@@ -337,7 +337,7 @@ Il design contract §19 elenca 7 milestone (M0-M6). Implementato in v1: **M0-M3*
 | M5 — Streamlit dashboard | ⏳ deferred |
 | M6 — Full-mode hardening | ⏳ deferred |
 
-**Cosa significa "deferred"**: lo scheletro CLI esiste (`mirtage validate-judge`, `mirtage dashboard`) ma le funzioni stampano *"not implemented in v1"*.
+**Cosa significa "deferred"**: lo scheletro CLI esiste (`ouroboros validate-judge`, `ouroboros dashboard`) ma le funzioni stampano *"not implemented in v1"*.
 
 ### B.4 `seeds.py` minimale ✦ DEVIAZIONE
 
@@ -385,7 +385,7 @@ Lista completa (design contract §21):
 |---|---|
 | **Survival curves / Kaplan-Meier** su queries-to-success | Mean dei successi è il pattern PAIR; più rigoroso ma non in v1. Parzialmente surrogato da `asr_vs_iter` (v2.1) che mostra la curva cumulativa di success per iter budget |
 | **Bootstrap CI** su ASR | Sostituito da Wilson 95% CI in v2.1 (vedi A.11) — più semplice, sufficiente per `n` tipico del dataset |
-| **Toxicity / Regard** (alla BOLD) | Sono metriche text-based; MIRTAGE judge è multimodale, scoring diverso |
+| **Toxicity / Regard** (alla BOLD) | Sono metriche text-based; Ouroboros judge è multimodale, scoring diverso |
 | **FairFace classifier** per ground-truth demographics | Strumento di calibrazione (M4), non del production loop |
 | **CLIP zero-shot bias scoring** | Considerato come pre-filter, deferred |
 | **Statistical significance test cross-run** (paired t-test / bootstrap su seed comuni) | `aggregate_runs` in v2.1 fornisce mean ± std; un test formale è prossimo step naturale ma richiede decisione di soglia α |
@@ -401,7 +401,7 @@ Lista completa (design contract §21):
                               │ adattamento al T2I
                               ▼
             ┌─────────────────────────────────────┐
-            │  MIRTAGE (questo framework, v2.1)  │
+            │  Ouroboros (questo framework, v2.1)  │
             └─────────────────────────────────────┘
                     │              │              │
                     │              │              │

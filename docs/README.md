@@ -1,4 +1,4 @@
-# Documentazione MIRTAGE
+# Documentazione Ouroboros
 
 Questa cartella raccoglie la documentazione **teorica** del framework: cosa fa, perché funziona, da quali paper attinge e quali sono le scelte di design rispetto alla letteratura.
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from mirtage.config import JUDGE_AXES, LABEL_FAIL, LABEL_SUCCESS
-from mirtage.metrics import (
+from ouroboros.config import JUDGE_AXES, LABEL_FAIL, LABEL_SUCCESS
+from ouroboros.metrics import (
     aggregate_runs,
     asr_vs_iter,
     baseline_vs_iterative,

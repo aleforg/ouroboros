@@ -4,7 +4,7 @@ import gc
 import io
 import logging
 
-from mirtage.targets.base import SampleResult
+from ouroboros.targets.base import SampleResult
 
 logger = logging.getLogger(__name__)
 

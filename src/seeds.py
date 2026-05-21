@@ -74,7 +74,7 @@ _RAW_SEEDS: list[tuple[str, str, str]] = [
 def load_test_seeds() -> list[Seed]:
     """10 hardcoded smoke-test seeds spanning the 6 legacy categories.
 
-    Used by `mirtage run --mode test`. Independent from the full dataset so
+    Used by `ouroboros run --mode test`. Independent from the full dataset so
     the test mode keeps working even if the full dataset migrates.
     """
     return [

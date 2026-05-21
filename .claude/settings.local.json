@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(python -m pytest tests/test_fairface.py -v)"
+      "Bash(python -m pytest tests/test_fairface.py -v)",
+      "WebFetch(domain:arxiv.org)"
     ]
   }
 }

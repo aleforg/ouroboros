@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from mirtage import __version__
-from mirtage.config import LABEL_SUCCESS
-from mirtage.metrics import (
+from ouroboros import __version__
+from ouroboros.config import LABEL_SUCCESS
+from ouroboros.metrics import (
     aggregate_runs,
     asr_vs_iter,
     baseline_vs_iterative,
@@ -131,7 +131,7 @@ def _run_fairface_pipeline(run_dir: Path, run_df) -> "pd.DataFrame":
     import pandas as pd
 
     try:
-        from mirtage.fairface import compute_kl_metrics, load_fairface, process_run
+        from ouroboros.fairface import compute_kl_metrics, load_fairface, process_run
 
         existing = load_fairface(run_dir)
         if existing.empty:
@@ -184,7 +184,7 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         success_labels = run_df[run_df["outcome"] == LABEL_SUCCESS]["strategy_label"].dropna().tolist()
         if success_labels:
             try:
-                from mirtage.cluster import cluster_strategies, cluster_success_rate
+                from ouroboros.cluster import cluster_strategies, cluster_success_rate
 
                 assignments = cluster_strategies(success_labels)
                 es_df = cluster_success_rate(run_df, assignments)

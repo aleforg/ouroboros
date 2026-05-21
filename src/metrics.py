@@ -8,7 +8,7 @@ from typing import Any, Sequence
 
 import pandas as pd
 
-from mirtage.config import JUDGE_AXES, LABEL_FAIL, LABEL_SUCCESS
+from ouroboros.config import JUDGE_AXES, LABEL_FAIL, LABEL_SUCCESS
 
 # Z value for 95% normal CI (kept for the Wilson helper below)
 _Z_95 = 1.959963984540054

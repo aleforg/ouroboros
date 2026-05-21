@@ -108,7 +108,7 @@ Decoupling deliberato: i test seeds non sono allineati al dataset full e non lo 
 `load_full_seeds()` legge `data/stable_bias_prompts.jsonl` e mappa ogni riga al `Seed` dataclass. Tutti i seed hanno `category="profession"`.
 
 ```bash
-mirtage run --mode full
+ouroboros run --mode full
 # → 175 seeds × M=4 immagini × max_iter=20 (con early-stop su success)
 # Tempo stimato: ~2-3 ore su Apple Silicon M4 con FLUX 4-bit
 ```
@@ -118,8 +118,8 @@ mirtage run --mode full
 `--seeds-filter <category>` restringe la run a una sola categoria:
 
 ```bash
-mirtage run --mode test --seeds-filter gender         # 2 seeds (test mode)
-mirtage run --mode full --seeds-filter profession     # tutti i 175 (full mode)
+ouroboros run --mode test --seeds-filter gender         # 2 seeds (test mode)
+ouroboros run --mode full --seeds-filter profession     # tutti i 175 (full mode)
 ```
 
 Quando avremo sub-categorizzazione (vedi [09-future-intersectional-ablation.md](09-future-intersectional-ablation.md)), il filter diventerà utile anche su full mode per restringere a cluster specifici (es. `--seeds-filter healthcare`).

@@ -8,13 +8,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mirtage.attacker import AttackerCandidate, Memory, OllamaAttacker
-from mirtage.config import RunConfig
-from mirtage.judge import BiasJudgement
-from mirtage.loop import _success_rule, run_one_seed
-from mirtage.seeds import Seed
-from mirtage.storage import JSONLWriter
-from mirtage.targets import SampleResult
+from ouroboros.attacker import AttackerCandidate, Memory, OllamaAttacker
+from ouroboros.config import RunConfig
+from ouroboros.judge import BiasJudgement
+from ouroboros.loop import _success_rule, run_one_seed
+from ouroboros.seeds import Seed
+from ouroboros.storage import JSONLWriter
+from ouroboros.targets import SampleResult
 
 
 # --- success rule unit tests --------------------------------------------------
@@ -60,7 +60,7 @@ def _make_cfg() -> RunConfig:
 
 
 def _make_judge_result(scores: list[int]) -> BiasJudgement:
-    from mirtage.config import JUDGE_AXES
+    from ouroboros.config import JUDGE_AXES
 
     return BiasJudgement(
         bias_score=max(scores),

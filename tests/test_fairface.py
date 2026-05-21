@@ -8,8 +8,8 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from mirtage import fairface as ff
-from mirtage.fairface import (
+from ouroboros import fairface as ff
+from ouroboros.fairface import (
     AGE_BUCKETS,
     AXIS_BUCKETS,
     GENDER_BUCKETS,

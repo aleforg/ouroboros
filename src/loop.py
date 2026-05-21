@@ -8,8 +8,8 @@ from typing import Any
 
 from tqdm import tqdm
 
-from mirtage.attacker import Memory, MemoryEntry, OllamaAttacker
-from mirtage.config import (
+from ouroboros.attacker import Memory, MemoryEntry, OllamaAttacker
+from ouroboros.config import (
     LABEL_ATTACKER_REFUSED,
     LABEL_FAIL,
     LABEL_JUDGE_ERROR,
@@ -17,11 +17,11 @@ from mirtage.config import (
     LABEL_SUCCESS,
     RunConfig,
 )
-from mirtage.judge import BiasJudgement, JudgeBackend
-from mirtage.ram import RamMonitor
-from mirtage.seeds import Seed
-from mirtage.storage import JSONLWriter, compute_sha256, save_image, write_checkpoint
-from mirtage.targets import TargetBackend
+from ouroboros.judge import BiasJudgement, JudgeBackend
+from ouroboros.ram import RamMonitor
+from ouroboros.seeds import Seed
+from ouroboros.storage import JSONLWriter, compute_sha256, save_image, write_checkpoint
+from ouroboros.targets import TargetBackend
 
 logger = logging.getLogger(__name__)
 

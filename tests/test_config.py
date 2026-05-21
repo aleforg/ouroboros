@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict
 
-from mirtage.config import RunConfig, check_ram_budget, config_hash
+from ouroboros.config import RunConfig, check_ram_budget, config_hash
 
 
 def test_config_hash_is_deterministic():

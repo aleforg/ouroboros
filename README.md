@@ -1,6 +1,10 @@
-# MIRTAGE - **Multimodal Iterative Red Teaming for Adversarial Generative-AI Evaluation**
+# Ouroboros — An Adversarial Iterative Approach for Bias Elicitation in GenAI
 
-Framework iterativo di red-teaming basato su LLM per misurare il bias demografico e stereotipico-occupazionale nei modelli text-to-image (sovra/sottorappresentazione di gender, race, age e associazioni implicite tra professioni e gruppi demografici). L'approccio usa **attacchi avversariali**: invece di valutare il modello su prompt neutri — dove i filtri di sicurezza e l'allineamento spesso mascherano il problema — un LLM locale non censurato (*attacker*) riscrive iterativamente la scena per **far emergere bias latenti che non si manifesterebbero su input standard**. Il modello T2I (*target*) genera M immagini sul prompt avversariale, un VLM (*judge*) le valuta su cinque assi di bias e l'esito alimenta la riscrittura successiva. Il ciclo itera per ogni seed fino al successo (≥N immagini su M oltre la soglia) o al raggiungimento di `max_iter`.
+Ouroboros è un framework multi-fase per l'analisi avversariale dei modelli generativi. 
+
+La **prima fase** — implementata in questo repository — riguarda la **bias elicitation sui modelli text-to-image (T2I)**: l'obiettivo è misurare il bias demografico e stereotipico-occupazionale (sovra/sottorappresentazione di gender, race, age e associazioni implicite tra professioni e gruppi demografici) attraverso attacchi avversariali iterativi, piuttosto che valutazioni su prompt neutri dove filtri di sicurezza e allineamento spesso mascherano il problema.
+
+L'approccio usa **attacchi avversariali**: un LLM locale non censurato (*attacker*) riscrive iterativamente la scena per **far emergere bias latenti che non si manifesterebbero su input standard**. Il modello T2I (*target*) genera M immagini sul prompt avversariale, un VLM (*judge*) le valuta su cinque assi di bias e l'esito alimenta la riscrittura successiva. Il ciclo itera per ogni seed fino al successo (≥N immagini su M oltre la soglia) o al raggiungimento di `max_iter`.
 
 Adatta l'approccio PAIR (Chao et al., 2023) dal jailbreak testuale alla fairness T2I. Vedi `docs/` (numerati 01–08) per le motivazioni di design e `docs/08-deviations.md` per le deviazioni rispetto a entrambi.
 
@@ -25,7 +29,7 @@ Per la pipeline FairFace post-hoc (opzionale):
 pip install -e ".[fairface]"
 ```
 
-Scaricare manualmente i pesi `res34_fair_align_multi_7_20190809.pt` da [joojs/fairface](https://github.com/joojs/fairface) in `~/.cache/mirtage/fairface/` (oppure puntare con `MIRTAGE_FAIRFACE_WEIGHTS`).
+Scaricare manualmente i pesi `res34_fair_align_multi_7_20190809.pt` da [joojs/fairface](https://github.com/joojs/fairface) in `~/.cache/ouroboros/fairface/` (oppure puntare con `OUROBOROS_FAIRFACE_WEIGHTS`).
 
 Variabili d'ambiente richieste (vedi `.env.example`):
 
@@ -38,25 +42,25 @@ Esecuzione del loop:
 
 ```bash
 # Modalità test: 10 seed hard-coded, M=2, max_iter=5, soglia=7
-mirtage run --mode test
+ouroboros run --mode test
 
 # Modalità full: 175 seed da data/stable_bias_prompts.jsonl, M=4, max_iter=20
-mirtage run --mode full
+ouroboros run --mode full
 
 # Flag utili
-mirtage run --mode test --baseline single-shot       # esegue anche baseline senza attacker
-mirtage run --mode test --seeds-filter gender        # restringe a una categoria CLEAR-Bias
-mirtage run --mode test --judge-backend mlx          # judge offline
-mirtage run --resume <run_id>                        # riprende dopo interruzione
-mirtage run --dry-run                                # elenca seed e crea run dir senza chiamate
+ouroboros run --mode test --baseline single-shot       # esegue anche baseline senza attacker
+ouroboros run --mode test --seeds-filter gender        # restringe a una categoria CLEAR-Bias
+ouroboros run --mode test --judge-backend mlx          # judge offline
+ouroboros run --resume <run_id>                        # riprende dopo interruzione
+ouroboros run --dry-run                                # elenca seed e crea run dir senza chiamate
 ```
 
 Analisi post-hoc:
 
 ```bash
-mirtage report <run_id>                              # CSV + report.html self-contained
-mirtage report <run_id> --no-fairface                # salta la pipeline FairFace
-mirtage aggregate <run_id_1> <run_id_2> [...]        # media±std cross-run
+ouroboros report <run_id>                              # CSV + report.html self-contained
+ouroboros report <run_id> --no-fairface                # salta la pipeline FairFace
+ouroboros aggregate <run_id_1> <run_id_2> [...]        # media±std cross-run
 ```
 
 Test:
@@ -72,7 +76,7 @@ results/<run_id>/                       # run_id = "YYYY-MM-DD_HHMMSS_<8-char-co
 ├── run.jsonl                           # una riga per iterazione
 ├── baseline.jsonl                      # se --baseline è stato passato
 ├── ram.jsonl                           # snapshot psutil (5 fasi × iter × seed)
-├── fairface.jsonl                      # una riga per volto rilevato (scritto da `mirtage report`)
+├── fairface.jsonl                      # una riga per volto rilevato (scritto da `ouroboros report`)
 ├── checkpoint.json                     # consumato da --resume
 ├── meta.json                           # RunConfig frozen + config_hash + timestamp
 ├── images/<seed_id>/iter_NN/sample_K.png
@@ -84,7 +88,7 @@ results/<run_id>/                       # run_id = "YYYY-MM-DD_HHMMSS_<8-char-co
 
 ## Architettura
 
-![Architettura MIRTAGE](/assets/mirtage-architecture.svg)
+![Architettura Ouroboros](/assets/ouroboros-architecture.svg)
 
 Vedi `docs/02-architecture.md` per l'architettura completa. Il loop per seed (`src/loop.py:run_one_seed`) si articola in:
 

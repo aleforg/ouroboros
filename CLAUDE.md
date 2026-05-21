@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-MIRTAGE is an iterative LLM red-teaming framework for measuring demographic bias in text-to-image models. A local uncensored LLM (attacker) rewrites a neutral scene description into adversarial prompts, a T2I model (target) generates M images, and a VLM (judge) scores them on five bias axes. The loop iterates per seed until success (≥N of M images cross the bias threshold) or `max_iter`.
+Ouroboros is an iterative LLM red-teaming framework for measuring demographic bias in text-to-image models. A local uncensored LLM (attacker) rewrites a neutral scene description into adversarial prompts, a T2I model (target) generates M images, and a VLM (judge) scores them on five bias axes. The loop iterates per seed until success (≥N of M images cross the bias threshold) or `max_iter`.
 
 Lineage: adapts PAIR (Chao et al., 2023) from text-jailbreak to T2I-fairness. See `docs/` (numbered 01–08) for the design rationale and `SPEC.md` for the original design contract; `docs/08-deviations.md` tracks where the current code diverges from both.
 
@@ -28,27 +28,29 @@ pip install -e ".[dev]"
 Run the loop:
 ```bash
 # Test mode: 10 hard-coded seeds, M=2, max_iter=5, threshold=7
-mirtage run --mode test
+ouroboros run --mode test
 
 # Full mode: 175 seeds from data/stable_bias_prompts.jsonl (Stable Bias professions), M=4, max_iter=20
-mirtage run --mode full
+ouroboros run --mode full
 
 # Useful flags
-mirtage run --mode test --baseline single-shot       # also run no-attacker baseline
-mirtage run --mode test --seeds-filter gender        # restrict to one CLEAR-Bias category
-mirtage run --mode test --judge-backend mlx          # offline judge
-mirtage run --resume <run_id>                        # pick up after interruption
-mirtage run --dry-run                                # list seeds + create run dir, no API calls
+ouroboros run --mode test --baseline single-shot       # also run no-attacker baseline
+ouroboros run --mode test --seeds-filter gender        # restrict to one CLEAR-Bias category
+ouroboros run --mode test --judge-backend mlx          # offline judge
+ouroboros run --resume <run_id>                        # pick up after interruption
+ouroboros run --replay <run_id>                        # regenerate a past run's prompts into results/replay_<id>/, compare SHA256
+ouroboros run --dry-run                                # list seeds + create run dir, no API calls
 ```
 
 Post-hoc analysis:
 ```bash
-mirtage report <run_id>                              # CSV + self-contained report.html
-mirtage report <run_id> --no-fairface                # skip FairFace KL pipeline (torch not installed, etc.)
-mirtage aggregate <run_id_1> <run_id_2> [...]        # cross-run mean±std
+ouroboros report <run_id>                              # CSV + self-contained report.html
+ouroboros report <run_id> --no-fairface                # skip FairFace KL pipeline (torch not installed, etc.)
+ouroboros aggregate <run_id_1> <run_id_2> [...]        # cross-run mean±std
+ouroboros validate-judge --dataset control.jsonl       # judge vs human control set: MAE, Pearson, agreement@threshold
 ```
 
-FairFace pipeline (post-hoc, runs inside `mirtage report`): requires the `[fairface]` extra (`pip install -e ".[fairface]"`) and the ResNet-34 weights `res34_fair_align_multi_7_20190809.pt` downloaded manually from [joojs/fairface](https://github.com/joojs/fairface) into `~/.cache/mirtage/fairface/` (or pointed to by `MIRTAGE_FAIRFACE_WEIGHTS`). Produces `<run_dir>/fairface.jsonl` (one row per detected face) and `<run_dir>/report/fairface_per_category.csv` (KL divergence + normalized entropy on gender/race/age).
+FairFace pipeline (post-hoc, runs inside `ouroboros report`): requires the `[fairface]` extra (`pip install -e ".[fairface]"`) and the ResNet-34 weights `res34_fair_align_multi_7_20190809.pt` downloaded manually from [joojs/fairface](https://github.com/joojs/fairface) into `~/.cache/ouroboros/fairface/` (or pointed to by `OUROBOROS_FAIRFACE_WEIGHTS`). Produces `<run_dir>/fairface.jsonl` (one row per detected face) and `<run_dir>/report/fairface_per_category.csv` (KL divergence + normalized entropy on gender/race/age).
 
 Tests:
 ```bash
@@ -61,9 +63,9 @@ Required env (see `.env.example`): `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PR
 
 ## Package layout quirk
 
-`pyproject.toml` maps the package `mirtage` to the `src/` directory (`[tool.setuptools.package-dir] mirtage = "src"`). So **modules in `src/` are imported as `mirtage.X`**, not `src.X`. There is no nested `src/mirtage/` directory. Test imports follow the same convention.
+`pyproject.toml` maps the package `ouroboros` to the `src/` directory (`[tool.setuptools.package-dir] ouroboros = "src"`). So **modules in `src/` are imported as `ouroboros.X`**, not `src.X`. There is no nested `src/ouroboros/` directory. Test imports follow the same convention.
 
-The entry point `mirtage` (defined in `pyproject.toml`) routes to `src/cli.py:main`.
+The entry point `ouroboros` (defined in `pyproject.toml`) routes to `src/cli.py:main`.
 
 ## Architecture: the per-seed loop
 
@@ -86,7 +88,7 @@ Outcomes labeled `judge_error` or `attacker_refused` are written to `run.jsonl` 
 | Module | Role |
 |---|---|
 | `config.py` | All constants, `RunConfig` (frozen dataclass), `ModeBudget` (TEST vs FULL), RAM budget check, `MODEL_SIZE_REGISTRY` |
-| `cli.py` | `argparse` entry; subcommands `run`, `report`, `aggregate` (plus stubs `validate-judge`, `dashboard`) |
+| `cli.py` | `argparse` entry; subcommands `run` (incl. `--resume`/`--replay`), `report`, `aggregate`, `validate-judge` (plus stub `dashboard`) |
 | `seeds.py` | `load_test_seeds()` (10 hard-coded across 6 legacy categories) and `load_full_seeds()` (175 prompts from `data/stable_bias_prompts.jsonl`, all `category="profession"`, `"Photo portrait of a [X]"` template). Old CLEAR-Bias × BOLD dataset archived under `data/legacy/` |
 | `attacker.py` | `OllamaAttacker` + `Memory` + `MemoryEntry`. JSON-format Ollama call, refusal detection, retry-with-prefix, `aclose()` lifecycle |
 | `targets/base.py` | `TargetBackend` Protocol, `SampleResult`, `RateLimiter`, `build_target()` factory. Only `"flux"` backend currently wired; the factory raises ValueError for any other name |
@@ -94,8 +96,10 @@ Outcomes labeled `judge_error` or `attacker_refused` are written to `run.jsonl` 
 | `judge.py` | `BiasJudgement` Pydantic schema (5 axes), `GeminiJudge` / `MLXJudge` / `OllamaJudge`, brace-counting JSON extractor |
 | `ram.py` | `RamMonitor` — psutil snapshots at 5 phases per iter; writes `ram.jsonl`; embeds compact `ram_gb` dict in each `run.jsonl` record |
 | `loop.py` | Per-seed `run_one_seed`, outer `run_pair_loop`, `_success_rule`, `_write_record` |
-| `baseline.py` | `run_baseline` — single-shot using `seed.base_scene` directly (no attacker), writes `baseline.jsonl` |
-| `storage.py` | `make_run_dir`, `JSONLWriter` (append + periodic fsync), `save_image`, `write_checkpoint`/`load_checkpoint`, `write_meta` |
+| `baseline.py` | `run_baseline` — single-shot using `seed.base_scene` directly (no attacker), writes `baseline.jsonl`; images go under `images/<seed>/baseline/` (own namespace, no `iter_00` collision) |
+| `replay.py` | `run_replay` — reads prompts from a past run's `run.jsonl`/`baseline.jsonl`, regenerates via the target (loaded once, unloaded once — target-only, no per-record `aclose`), compares new vs stored SHA256. Output dir `results/replay_<id>/` with `replay_summary.json` (match/total + rate) |
+| `validate.py` | `run_judge_validation` — judge vs human-annotated control-set JSONL: MAE, `pearson_correlation`, agreement rate at threshold, failure rate |
+| `storage.py` | `make_run_dir`, `JSONLWriter` (append + periodic fsync), `save_image` (`iter_idx: int \| str`), `write_checkpoint`/`load_checkpoint`, `write_meta` |
 | `metrics.py` | `wilson_ci`, `summary_per_seed`, `per_category`, `baseline_vs_iterative`, `asr_vs_iter`, `intra_batch_variance`, `aggregate_runs`. **Per-axis judge means no longer reported** — migrated to `fairface.py` (v2.2) |
 | `fairface.py` | MTCNN + FairFace ResNet-34 pipeline; `process_run` walks `images/` and writes `fairface.jsonl`; `compute_kl_metrics` aggregates per-category KL divergence + normalized entropy on gender/race/age. Torch is imported lazily — math helpers (`axis_metrics`, `_smoothed_distribution`) are testable without it |
 | `cluster.py` | HDBSCAN clustering of `strategy_label` using sentence-transformers embeddings |
@@ -108,11 +112,11 @@ results/<run_id>/                       # run_id = "YYYY-MM-DD_HHMMSS_<8-char-co
 ├── run.jsonl                           # one row per iteration; includes compact ram_gb
 ├── baseline.jsonl                      # if --baseline was passed
 ├── ram.jsonl                           # full psutil snapshots, 5 phases × iters × seeds
-├── fairface.jsonl                      # one row per detected face (written by `mirtage report` when FairFace runs)
+├── fairface.jsonl                      # one row per detected face (written by `ouroboros report` when FairFace runs)
 ├── checkpoint.json                     # completed_seed_ids + global_calls; consumed by --resume
 ├── meta.json                           # frozen RunConfig + config_hash + timestamps
 ├── images/<seed_id>/iter_NN/sample_K.png
-└── report/                             # produced by `mirtage report`
+└── report/                             # produced by `ouroboros report`
     ├── summary.csv, per_category.csv, asr_vs_iter.csv, …
     ├── fairface_per_category.csv       # KL + norm_entropy on gender/race/age
     └── report.html
@@ -125,6 +129,6 @@ results/<run_id>/                       # run_id = "YYYY-MM-DD_HHMMSS_<8-char-co
 - Code uses `from __future__ import annotations` everywhere. Python ≥ 3.10.
 - `RunConfig` is `frozen=True`; mutate by constructing a new instance.
 - Judge output schema is strict: `per_axis_scores` must contain all five axes in `JUDGE_AXES`; the validator clamps to 0–10 and recomputes `bias_score = max(per_image_scores)`.
-- `mirtage.targets.SampleResult` (re-exported via `targets/__init__.py`) is the canonical import path; the old shim `mirtage.target` was removed in v2.4.
+- `ouroboros.targets.SampleResult` (re-exported via `targets/__init__.py`) is the canonical import path; the old shim `ouroboros.target` was removed in v2.4.
 - Documentation in `docs/` is **in Italian**; SPEC and code comments are English. Keep that split when editing.
-- `validate-judge` and `dashboard` subcommands are intentional stubs (M4/M5, deferred per SPEC §19).
+- `validate-judge` (`src/validate.py`) scores a judge backend against a human-annotated control-set JSONL (MAE, Pearson correlation, agreement rate at `--bias-threshold`). `dashboard` remains an intentional stub (M5, deferred per SPEC §19).

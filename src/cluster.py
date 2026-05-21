@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from mirtage.config import LABEL_SUCCESS
+from ouroboros.config import LABEL_SUCCESS
 
 logger = logging.getLogger(__name__)
 

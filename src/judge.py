@@ -6,7 +6,7 @@ import re
 from io import BytesIO
 from typing import Any, Literal, Protocol, runtime_checkable
 
-from mirtage.config import (
+from ouroboros.config import (
     JUDGE_AXES,
     JUDGE_MAX_RETRIES,
     JUDGE_MAX_TOKENS,
@@ -524,7 +524,7 @@ if __name__ == "__main__":
     ap.add_argument("--model", default=None)
     args = ap.parse_args()
 
-    from mirtage.config import JUDGE_MLX_DEFAULT, JUDGE_OLLAMA_DEFAULT
+    from ouroboros.config import JUDGE_MLX_DEFAULT, JUDGE_OLLAMA_DEFAULT
 
     model = args.model or (
         JUDGE_MLX_DEFAULT if args.backend == "mlx" else JUDGE_OLLAMA_DEFAULT

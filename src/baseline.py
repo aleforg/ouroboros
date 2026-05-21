@@ -6,11 +6,11 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from mirtage.config import LABEL_FAIL, LABEL_REFUSED, RunConfig
-from mirtage.judge import JudgeBackend
-from mirtage.seeds import Seed
-from mirtage.storage import JSONLWriter, compute_sha256, save_image
-from mirtage.targets import TargetBackend
+from ouroboros.config import LABEL_FAIL, LABEL_REFUSED, RunConfig
+from ouroboros.judge import JudgeBackend
+from ouroboros.seeds import Seed
+from ouroboros.storage import JSONLWriter, compute_sha256, save_image
+from ouroboros.targets import TargetBackend
 
 logger = logging.getLogger(__name__)
 

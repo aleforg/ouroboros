@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from mirtage import __version__
-from mirtage.config import (
+from ouroboros import __version__
+from ouroboros.config import (
     ATTACKER_DEFAULT,
     FULL_BUDGET,
     JUDGE_BACKEND_DEFAULT,
@@ -25,8 +25,8 @@ from mirtage.config import (
     RunConfig,
     check_ram_budget,
 )
-from mirtage.seeds import load_full_seeds, load_test_seeds
-from mirtage.storage import (
+from ouroboros.seeds import load_full_seeds, load_test_seeds
+from ouroboros.storage import (
     JSONLWriter,
     make_run_dir,
     update_meta_ended,
@@ -51,10 +51,10 @@ def _setup_logging(level: str = "INFO") -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="mirtage",
-        description=f"MIRTAGE v{__version__}: iterative LLM red-teaming for T2I fairness",
+        prog="ouroboros",
+        description=f"Ouroboros v{__version__}: iterative LLM red-teaming for T2I fairness",
     )
-    p.add_argument("--version", action="version", version=f"mirtage {__version__}")
+    p.add_argument("--version", action="version", version=f"ouroboros {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
     # ── run ──────────────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     logger.info(
-        "═══ mirtage run ═══  mode=%s  seeds=%d  target=flux  judge=%s/%s  attacker=%s  unload=%s",
+        "═══ ouroboros run ═══  mode=%s  seeds=%d  target=flux  judge=%s/%s  attacker=%s  unload=%s",
         cfg.mode, len(seeds), cfg.judge_backend, cfg.judge_model,
         cfg.attacker_model, cfg.aggressive_unload,
     )
@@ -222,12 +222,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
 
 async def _async_run(cfg: RunConfig, seeds: list, args: argparse.Namespace) -> None:
-    from mirtage.targets import build_target
-    from mirtage.judge import build_judge
-    from mirtage.attacker import OllamaAttacker
-    from mirtage.storage import make_run_dir, write_meta, update_meta_ended, JSONLWriter
-    from mirtage.loop import run_pair_loop
-    from mirtage.baseline import run_baseline
+    from ouroboros.targets import build_target
+    from ouroboros.judge import build_judge
+    from ouroboros.attacker import OllamaAttacker
+    from ouroboros.storage import make_run_dir, write_meta, update_meta_ended, JSONLWriter
+    from ouroboros.loop import run_pair_loop
+    from ouroboros.baseline import run_baseline
 
     run_dir, run_id = make_run_dir(cfg.output_dir, cfg)
     started_at = datetime.now(timezone.utc).isoformat()
@@ -265,7 +265,7 @@ async def _async_run(cfg: RunConfig, seeds: list, args: argparse.Namespace) -> N
 
     resume_seed_ids: set[str] | None = None
     if args.resume:
-        from mirtage.storage import load_checkpoint
+        from ouroboros.storage import load_checkpoint
         ckpt = load_checkpoint(Path(cfg.output_dir) / args.resume)
         if ckpt:
             resume_seed_ids = set(ckpt.get("completed_seed_ids", []))
@@ -290,7 +290,7 @@ async def _async_run(cfg: RunConfig, seeds: list, args: argparse.Namespace) -> N
 
 def _cmd_report(args: argparse.Namespace) -> None:
     _setup_logging(args.log_level)
-    from mirtage.report import run_report
+    from ouroboros.report import run_report
     run_dir = Path(args.output_dir) / args.run_id
     if not run_dir.exists():
         # Maybe the user passed a full path
@@ -303,7 +303,7 @@ def _cmd_report(args: argparse.Namespace) -> None:
 
 def _cmd_aggregate(args: argparse.Namespace) -> None:
     _setup_logging(args.log_level)
-    from mirtage.report import run_aggregate_report
+    from ouroboros.report import run_aggregate_report
 
     run_dirs: list[Path] = []
     for rid in args.run_ids:

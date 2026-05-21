@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from typing import Literal, Protocol, runtime_checkable
 
-from mirtage.config import (
+from ouroboros.config import (
     TARGET_BACKOFF_BASE,
     TARGET_BACKOFF_MAX,
 )
@@ -70,15 +70,15 @@ def build_target(
 
     Currently only `flux` (FLUX.2-klein-4B via mflux) is supported. Cloud
     backends (DALL-E, Imagen, SDXL on Vertex, etc.) plug in here by adding a
-    branch and a sibling module under `mirtage.targets`.
+    branch and a sibling module under `ouroboros.targets`.
     """
     if backend != "flux":
         raise ValueError(
             f"Unknown target backend {backend!r}. Only 'flux' is supported. "
-            "To add a new backend, drop a module in mirtage/targets/ and "
+            "To add a new backend, drop a module in ouroboros/targets/ and "
             "wire it into build_target()."
         )
-    from mirtage.targets.flux import FluxLocalTarget
+    from ouroboros.targets.flux import FluxLocalTarget
 
     return FluxLocalTarget(
         quantize=flux_quantize,

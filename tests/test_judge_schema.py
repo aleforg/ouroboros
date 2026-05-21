@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mirtage.judge import BiasJudgement, MLXJudge, OllamaJudge, _extract_json
+from ouroboros.judge import BiasJudgement, MLXJudge, OllamaJudge, _extract_json
 
 
 # --- _extract_json tests ------------------------------------------------------

@@ -1,8 +1,8 @@
 # 06 — Metrics & Strategy Clustering
 
-Tutte le metriche sono calcolate **post-hoc** da `run.jsonl` (e opzionalmente `baseline.jsonl`). Il comando `mirtage report <run_id>` produce CSV + JSON + un `report.html` Jinja-based con **chart SVG inline** (zero dipendenze esterne).
+Tutte le metriche sono calcolate **post-hoc** da `run.jsonl` (e opzionalmente `baseline.jsonl`). Il comando `ouroboros report <run_id>` produce CSV + JSON + un `report.html` Jinja-based con **chart SVG inline** (zero dipendenze esterne).
 
-Per evaluation multi-run: `mirtage aggregate <run_id_1> <run_id_2> [...]` produce un `aggregate_report.html` separato con cross-run mean ± std e per-seed stability.
+Per evaluation multi-run: `ouroboros aggregate <run_id_1> <run_id_2> [...]` produce un `aggregate_report.html` separato con cross-run mean ± std e per-seed stability.
 
 Codice in `src/metrics.py` e `src/cluster.py`.
 
@@ -136,7 +136,7 @@ I 3 assi nativi FairFace coperti:
 
 `body_type_skew` e `stereotype_framing` (i 2 assi judge fuori da FairFace) rimangono **solo nel loop** — alimentano la success rule e la memoria dell'attacker, ma non appaiono nel report aggregato.
 
-### Pipeline (post-hoc dentro `mirtage report`)
+### Pipeline (post-hoc dentro `ouroboros report`)
 
 ```
 PNG dell'iter → MTCNN face detector → crop+margin 25% → FairFace ResNet-34
@@ -144,7 +144,7 @@ PNG dell'iter → MTCNN face detector → crop+margin 25% → FairFace ResNet-34
 → aggregate per categoria → KL(p_emp || U) + H(p_emp)/log K → fairface_per_category.csv
 ```
 
-Codice: `src/fairface.py`. Si attiva automaticamente in `mirtage report`. Per disattivare (es. torch non installato): `mirtage report <run_id> --no-fairface`. I pesi vanno scaricati una tantum da [github.com/joojs/fairface](https://github.com/joojs/fairface) — file `res34_fair_align_multi_7_20190809.pt` (~85 MB) sotto `~/.cache/mirtage/fairface/`.
+Codice: `src/fairface.py`. Si attiva automaticamente in `ouroboros report`. Per disattivare (es. torch non installato): `ouroboros report <run_id> --no-fairface`. I pesi vanno scaricati una tantum da [github.com/joojs/fairface](https://github.com/joojs/fairface) — file `res34_fair_align_multi_7_20190809.pt` (~85 MB) sotto `~/.cache/ouroboros/fairface/`.
 
 ### Formule
 
@@ -303,7 +303,7 @@ category, n_iters_measured, mean_intra_batch_std, std_intra_batch_std
 Aggiunta in v2.1. Per claim statisticamente difendibili è necessario **ripetere lo stesso esperimento N volte** (l'attacker è stocastico, temperature 0.9). Il comando dedicato:
 
 ```bash
-mirtage aggregate run_id_1 run_id_2 run_id_3 [...]
+ouroboros aggregate run_id_1 run_id_2 run_id_3 [...]
 # → results/aggregate_<timestamp>/aggregate_report.html
 ```
 
@@ -447,7 +447,7 @@ results/<run_id>/report/
 
 ### Report aggregato (multi-run)
 
-`mirtage aggregate <run_id>...` produce una cartella separata:
+`ouroboros aggregate <run_id>...` produce una cartella separata:
 
 ```
 results/aggregate_<timestamp>/

@@ -18,7 +18,7 @@ flowchart TD
     F -->|no, iter == max| I[FAIL]
     G --> J[Write run.jsonl<br/>+ ram.jsonl + checkpoint]
     I --> J
-    J --> K[mirtage report<br/>metrics + clustering]
+    J --> K[ouroboros report<br/>metrics + clustering]
 ```
 
 ## Vista compatta del loop interno
@@ -122,7 +122,7 @@ flowchart LR
 | `metrics.py` | `summary_per_seed`, `per_category` (con Wilson CI e std), `baseline_vs_iterative`, `wilson_ci`, `asr_vs_iter`, `intra_batch_variance`, `aggregate_runs` (multi-run) | `pandas` |
 | `cluster.py` | Embedding strategie via `sentence-transformers`, clustering HDBSCAN, E(s) | `sentence-transformers`, `hdbscan` |
 | `report.py` | Aggrega metrics + cluster → CSV + `report.html` + chart SVG inline (ASR-vs-iter); `run_aggregate_report()` per `aggregate_report.html` cross-run | `jinja2` |
-| `cli.py` | argparse + entry point `mirtage` — subcommands: `run`, `report`, `aggregate` | `python-dotenv` |
+| `cli.py` | argparse + entry point `ouroboros` — subcommands: `run`, `report`, `aggregate` | `python-dotenv` |
 
 ## Flusso di una singola iterazione
 
@@ -238,13 +238,13 @@ Una riga `run.jsonl` (formato v2 con campo `target_backend` e `ram_gb`):
 
 ## Comandi CLI esposti
 
-Il binario `mirtage` (entry point in `pyproject.toml` → `cli.main`) espone tre subcommand:
+Il binario `ouroboros` (entry point in `pyproject.toml` → `cli.main`) espone tre subcommand:
 
 | Subcommand | Scopo |
 |---|---|
-| `mirtage run --mode {test,full} [flags]` | Esegue il loop PAIR e scrive `run.jsonl` |
-| `mirtage report <run_id>` | Post-hoc: produce `report/` con CSV + `report.html` self-contained + chart SVG ASR-vs-iter |
-| `mirtage aggregate <run_id_1> <run_id_2> [...]` | Cross-run: aggrega N run indipendenti dello stesso config → ASR mean ± std per categoria + per-seed stability |
+| `ouroboros run --mode {test,full} [flags]` | Esegue il loop PAIR e scrive `run.jsonl` |
+| `ouroboros report <run_id>` | Post-hoc: produce `report/` con CSV + `report.html` self-contained + chart SVG ASR-vs-iter |
+| `ouroboros aggregate <run_id_1> <run_id_2> [...]` | Cross-run: aggrega N run indipendenti dello stesso config → ASR mean ± std per categoria + per-seed stability |
 
 I subcommand stub `validate-judge` e `dashboard` esistono ma non sono implementati nella v2.
 

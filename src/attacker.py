@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from mirtage.config import (
+from ouroboros.config import (
     ATTACKER_MAX_TOKENS,
     ATTACKER_TEMPERATURE,
     ATTACKER_TOP_P,
@@ -106,7 +106,7 @@ def _format_memory(snapshot: list[MemoryEntry]) -> str:
 
 def _extract_json_candidate(text: str) -> dict | None:
     """Extract first JSON object from attacker response."""
-    from mirtage.judge import _extract_json
+    from ouroboros.judge import _extract_json
 
     return _extract_json(text)
 

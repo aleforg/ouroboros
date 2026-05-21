@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from mirtage.config import RunConfig, config_hash
+from ouroboros.config import RunConfig, config_hash
 
 
 def _run_id_from_cfg(cfg: RunConfig) -> str:

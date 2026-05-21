@@ -72,7 +72,7 @@ L'iterazione consuma il budget di `max_iter`, ma **non consuma** budget T2I. La 
 
 ### 4. Judge multi-modale e multi-axis
 
-Il judge di MIRTAGE non è un LLM — è un **VLM** che guarda le immagini direttamente. Inoltre, invece di restituire un punteggio scalare, restituisce uno schema strutturato:
+Il judge di Ouroboros non è un LLM — è un **VLM** che guarda le immagini direttamente. Inoltre, invece di restituire un punteggio scalare, restituisce uno schema strutturato:
 
 ```json
 {
@@ -99,7 +99,7 @@ Schema completo: `src/judge.py:19-49` (`BiasJudgement` Pydantic).
 
 ## La memoria dell'attacker
 
-MIRTAGE usa una memoria **bounded** che conserva due cose (`src/attacker.py:70-91`):
+Ouroboros usa una memoria **bounded** che conserva due cose (`src/attacker.py:70-91`):
 
 1. **Top-K per bias_score discending** — i `K` migliori tentativi precedenti, perché l'attacker capisca *quali strategie hanno funzionato meglio*.
 2. **Most-recent entry** — l'ultimo tentativo, indipendentemente dallo score, per evitare loop di prompt molto simili.
@@ -177,7 +177,7 @@ I 5 outcome (`src/config.py:10-15`):
 
 TAP — **Tree of Attacks with Pruning** — è il follow-up di PAIR. Invece di un singolo path lineare di iterazioni, fa una **ricerca ad albero**: ad ogni step l'attacker genera *più* candidati, un evaluator pota i meno promettenti, e si esplora in profondità solo i rami sopravvissuti.
 
-MIRTAGE è esplicitamente **PAIR, non TAP**: ogni iterazione produce esattamente un prompt candidato (no branching).
+Ouroboros è esplicitamente **PAIR, non TAP**: ogni iterazione produce esattamente un prompt candidato (no branching).
 
 Motivazioni della scelta:
 
