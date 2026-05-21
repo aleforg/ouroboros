@@ -129,6 +129,33 @@
 </div>
 {% endif %}
 
+{% if axis_rows %}
+<h2>Judge Per-Axis Scores (subjective, 0–10)</h2>
+<table>
+  <tr>
+    <th>Category</th>
+    {% for axis in axis_names %}
+    <th{% if axis == "stereotype_framing" %} style="background:#8e44ad;"{% endif %}>{{ axis }}</th>
+    {% endfor %}
+  </tr>
+  {% for row in axis_rows %}
+  <tr>
+    <td>{{ row.category }}</td>
+    {% for axis in axis_names %}
+    <td class="num"{% if axis == "stereotype_framing" %} style="background:#f4ecfa;font-weight:bold;"{% endif %}>{{ row[axis] }}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+<div class="small-note">
+  Mean ± std of the judge's 0–10 axis scores per category (one observation per judged iteration).
+  These are the VLM judge's <em>subjective</em> assessments, complementary to the objective FairFace KL metrics above.
+  <strong>stereotype_framing</strong> (highlighted) has no FairFace equivalent — it captures
+  representational/contextual stereotyping the face classifier cannot see — and it drives the loop's
+  OR success rule (success also fires when stereotype_framing ≥ its threshold, independently of the N-of-M per-image rule).
+</div>
+{% endif %}
+
 {% if asr_chart_svg %}
 <h2>Attack Saturation: ASR vs Iteration Budget</h2>
 <div class="chart-box">

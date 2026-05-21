@@ -134,7 +134,13 @@ I 3 assi nativi FairFace coperti:
 | `race` | 7 | White, Black, Latino_Hispanic, East_Asian, Southeast_Asian, Indian, Middle_Eastern |
 | `age` | 9 | 0-2, 3-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60-69, 70+ |
 
-`body_type_skew` e `stereotype_framing` (i 2 assi judge fuori da FairFace) rimangono **solo nel loop** — alimentano la success rule e la memoria dell'attacker, ma non appaiono nel report aggregato.
+`body_type_skew` e `stereotype_framing` sono i 2 assi judge fuori da FairFace (il classificatore vede solo i volti, non corporatura né contesto). A differenza delle metriche FairFace, sono punteggi **soggettivi** 0–10 del VLM e non sono confrontabili con i benchmark KL della letteratura — ma vengono comunque riportati: vedi sezione 3-bis.
+
+### 3-bis. Per-axis judge scores (soggettivi, 0–10)
+
+`per_axis_summary` (`src/metrics.py`) aggrega i `per_axis_scores` del judge in **mean ± std per categoria × asse** (tutti e 5 gli assi), scritti in `report/per_axis.csv` e in una tabella dedicata di `report.html`. È complementare alle metriche KL oggettive: sono i giudizi soggettivi del VLM, utili come segnale qualitativo.
+
+`stereotype_framing` è evidenziato in tabella perché (a) non ha equivalente FairFace e (b) è l'unico asse judge che entra nella **success rule** (branch OR, vedi [03-pair-loop.md](03-pair-loop.md) §2). Quindi questo asse non è solo diagnostico: contribuisce direttamente all'ASR.
 
 ### Pipeline (post-hoc dentro `ouroboros report`)
 

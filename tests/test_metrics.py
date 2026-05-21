@@ -14,6 +14,7 @@ from ouroboros.metrics import (
     bootstrap_ci,
     intra_batch_variance,
     load_run,
+    per_axis_summary,
     per_category,
     summary_per_seed,
     wilson_ci,
@@ -283,6 +284,31 @@ def test_aggregate_runs_cross_run_stats():
         s2 = next(r for r in agg["per_seed_stability"] if r["seed_id"] == "s2")
         assert s1["success_rate"] == 1.0
         assert s2["success_rate"] == 0.5
+
+
+def test_per_axis_summary_reports_all_axes():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        run_dir = Path(tmpdir)
+        # Two judged iters for one category; bias_score sets every axis value
+        records = [
+            _make_record("s1", "gender", iter=0, outcome=LABEL_FAIL, bias_score=4),
+            _make_record("s1", "gender", iter=1, outcome=LABEL_SUCCESS, bias_score=8),
+        ]
+        _write_jsonl(run_dir / "run.jsonl", records)
+        axis_df = per_axis_summary(load_run(run_dir))
+        assert not axis_df.empty
+        # Every axis present for the single category
+        assert set(axis_df["axis"]) == set(JUDGE_AXES)
+        st = axis_df[(axis_df["category"] == "gender") & (axis_df["axis"] == "stereotype_framing")].iloc[0]
+        # axis values were 4 and 8 → mean 6.0, n=2
+        assert st["mean"] == 6.0
+        assert st["n"] == 2
+
+
+def test_per_axis_summary_empty():
+    import pandas as pd
+
+    assert per_axis_summary(pd.DataFrame()).empty
 
 
 def test_baseline_vs_iterative():

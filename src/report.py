@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ouroboros import __version__
-from ouroboros.config import LABEL_SUCCESS
+from ouroboros.config import JUDGE_AXES, LABEL_SUCCESS
 from ouroboros.metrics import (
     aggregate_runs,
     asr_vs_iter,
@@ -16,6 +16,7 @@ from ouroboros.metrics import (
     intra_batch_variance,
     load_baseline,
     load_run,
+    per_axis_summary,
     per_category,
     summary_per_seed,
 )
@@ -122,6 +123,29 @@ def _svg_asr_curves(asr_df, width: int = 720, height: int = 320) -> str:
 # --- per-run report -----------------------------------------------------------
 
 
+def _pivot_axis_summary(axis_df) -> tuple[list[str], list[dict]]:
+    """Pivot long-form per_axis_summary into (axis_names, per-category rows).
+
+    Each row: {"category": cat, "<axis>": "mean ± std", ...}. Returns ([], [])
+    when there is nothing to show, so the template section is skipped.
+    """
+    if axis_df is None or axis_df.empty:
+        return [], []
+    axis_names = [a for a in JUDGE_AXES if a in set(axis_df["axis"])]
+    rows: list[dict] = []
+    for cat, grp in axis_df.groupby("category"):
+        row: dict = {"category": cat}
+        by_axis = {r["axis"]: r for r in grp.to_dict("records")}
+        for axis in axis_names:
+            rec = by_axis.get(axis)
+            if rec is None or rec.get("mean") is None:
+                row[axis] = "—"
+            else:
+                row[axis] = f"{rec['mean']} ± {rec['std']}"
+        rows.append(row)
+    return axis_names, rows
+
+
 def _run_fairface_pipeline(run_dir: Path, run_df) -> "pd.DataFrame":
     """Run FairFace classification + KL aggregation. Returns empty DataFrame on failure.
 
@@ -171,6 +195,7 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
 
     summary_df = summary_per_seed(run_df)
     cat_df = per_category(run_df)
+    axis_df = per_axis_summary(run_df) if not run_df.empty else None
     bvi = baseline_vs_iterative(baseline_df, run_df)
     asr_iter_df = asr_vs_iter(run_df) if not run_df.empty else None
     variance_df = intra_batch_variance(run_df) if not run_df.empty else None
@@ -196,6 +221,8 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         summary_df.to_csv(report_dir / "summary.csv", index=False)
     if not cat_df.empty:
         cat_df.to_csv(report_dir / "per_category.csv", index=False)
+    if axis_df is not None and not axis_df.empty:
+        axis_df.to_csv(report_dir / "per_axis.csv", index=False)
     if asr_iter_df is not None and not asr_iter_df.empty:
         asr_iter_df.to_csv(report_dir / "asr_vs_iter.csv", index=False)
     if variance_df is not None and not variance_df.empty:
@@ -235,6 +262,8 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
 
     asr_chart_svg = _svg_asr_curves(asr_iter_df) if asr_iter_df is not None else ""
 
+    axis_names, axis_rows = _pivot_axis_summary(axis_df)
+
     html = _render_html(
         run_id=run_dir.name,
         meta=meta,
@@ -246,12 +275,15 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         asr_chart_svg=asr_chart_svg,
         variance_rows=variance_df.to_dict("records") if variance_df is not None and not variance_df.empty else [],
         fairface_rows=fairface_df.to_dict("records") if fairface_df is not None and not fairface_df.empty else [],
+        axis_names=axis_names,
+        axis_rows=axis_rows,
     )
     (report_dir / "report.html").write_text(html, encoding="utf-8")
 
     logger.info("Report written to %s", report_dir)
     logger.info("  summary.csv                    → %d rows", len(summary_df) if not summary_df.empty else 0)
     logger.info("  per_category.csv               → %d rows", len(cat_df) if not cat_df.empty else 0)
+    logger.info("  per_axis.csv                   → %d rows", len(axis_df) if axis_df is not None and not axis_df.empty else 0)
     logger.info("  asr_vs_iter.csv                → %d rows", len(asr_iter_df) if asr_iter_df is not None else 0)
     logger.info("  intra_batch_variance.csv       → %d rows", len(variance_df) if variance_df is not None else 0)
     if fairface_df is not None and not fairface_df.empty:
@@ -310,6 +342,8 @@ def _render_html(
     asr_chart_svg: str,
     variance_rows: list[dict],
     fairface_rows: list[dict],
+    axis_names: list[str],
+    axis_rows: list[dict],
 ) -> str:
     from jinja2 import Environment, FileSystemLoader  # type: ignore[import]
 
@@ -329,6 +363,8 @@ def _render_html(
         asr_chart_svg=asr_chart_svg,
         variance_rows=variance_rows,
         fairface_rows=fairface_rows,
+        axis_names=axis_names,
+        axis_rows=axis_rows,
     )
 
 

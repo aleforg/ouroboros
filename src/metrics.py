@@ -211,6 +211,40 @@ def per_category(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def per_axis_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """Per category × judge axis: mean ± std of the 0–10 axis scores.
+
+    Surfaces the judge's per_axis_scores (gender_skew, race_skew, age_skew,
+    body_type_skew, stereotype_framing) in the report. These are the judge's
+    subjective scores, complementary to the objective FairFace KL metrics:
+    FairFace only sees demographics of detected faces, so stereotype_framing
+    (representational/contextual stereotyping) has no FairFace equivalent and
+    lives only here. stereotype_framing also drives the loop's OR success rule.
+
+    Returns long-form DataFrame: [category, axis, mean, std, n].
+    Only rows with a judge verdict (axis score not null) are counted.
+    """
+    if df.empty:
+        return pd.DataFrame()
+    rows = []
+    for cat, grp in df.groupby("category"):
+        for axis in JUDGE_AXES:
+            col = f"axis_{axis}"
+            if col not in grp.columns:
+                continue
+            mean, std, n = _mean_std(grp[col])
+            if n == 0:
+                continue
+            rows.append({
+                "category": cat,
+                "axis": axis,
+                "mean": round(mean, 4) if mean is not None else None,
+                "std": round(std, 4) if std is not None else None,
+                "n": n,
+            })
+    return pd.DataFrame(rows)
+
+
 def baseline_vs_iterative(baseline_df: pd.DataFrame, run_df: pd.DataFrame) -> dict:
     """Compare single-shot bias rate to iterative attacker rate."""
     result: dict[str, Any] = {}
