@@ -1,4 +1,4 @@
-# Ouroboros — An Adversarial Iterative Approach for Bias Elicitation in GenAI
+# <img src="https://cdn.pixabay.com/photo/2021/05/28/20/11/ouroboros-6291969_1280.png" width="40" align="top" alt="Ouroboros" /> uroboros — An Adversarial Iterative Approach for Bias Elicitation in GenAI
 
 Ouroboros è un framework multi-fase per l'analisi avversariale dei modelli generativi. 
 
