@@ -37,7 +37,7 @@ async def run_baseline(
         image_bytes_list = []
         for idx, s in enumerate(samples_raw):
             if s.outcome == "image" and s.image_bytes:
-                rel_path = save_image(run_dir, seed.seed_id, iter_idx=0, sample_idx=idx, png_bytes=s.image_bytes)
+                rel_path = save_image(run_dir, seed.seed_id, iter_idx="baseline", sample_idx=idx, png_bytes=s.image_bytes)
                 samples.append({"path": rel_path, "outcome": "image", "sha256": compute_sha256(s.image_bytes)})
                 image_bytes_list.append(s.image_bytes)
             else:

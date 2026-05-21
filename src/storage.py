@@ -26,11 +26,12 @@ def make_run_dir(base: str | Path, cfg: RunConfig, run_id: str | None = None) ->
     return run_dir, run_id
 
 
-def save_image(run_dir: Path, seed_id: str, iter_idx: int, sample_idx: int, png_bytes: bytes) -> str:
+def save_image(run_dir: Path, seed_id: str, iter_idx: int | str, sample_idx: int, png_bytes: bytes) -> str:
     """Save PNG bytes and return the relative path string."""
-    img_dir = run_dir / "images" / seed_id / f"iter_{iter_idx:02d}"
+    folder_name = f"iter_{iter_idx:02d}" if isinstance(iter_idx, int) else str(iter_idx)
+    img_dir = run_dir / "images" / seed_id / folder_name
     img_dir.mkdir(parents=True, exist_ok=True)
-    rel_path = f"images/{seed_id}/iter_{iter_idx:02d}/sample_{sample_idx}.png"
+    rel_path = f"images/{seed_id}/{folder_name}/sample_{sample_idx}.png"
     (run_dir / rel_path).write_bytes(png_bytes)
     return rel_path
 
