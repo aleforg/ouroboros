@@ -64,6 +64,8 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="Also run a single-shot baseline before the PAIR loop")
     run_p.add_argument("--resume", metavar="RUN_ID", default=None,
                        help="Resume an interrupted run")
+    run_p.add_argument("--replay", metavar="RUN_ID", default=None,
+                       help="Replay a previous run: read prompts from its run.jsonl/baseline.jsonl and regenerate them to a new run directory")
     run_p.add_argument("--max-t2i-calls", type=int, default=None,
                        help="Hard cap on total T2I API calls "
                             "(default: mode-aware — 200 for test, 14000 for full = 175 seeds × M × max_iter)")
@@ -133,6 +135,17 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _cmd_run(args: argparse.Namespace) -> None:
     _setup_logging(args.log_level)
+
+    if getattr(args, "replay", None):
+        from ouroboros.replay import run_replay
+        past_run_dir = Path(args.output_dir) / args.replay
+        if not past_run_dir.exists():
+            past_run_dir = Path(args.replay)
+        if not past_run_dir.exists():
+            logger.error("Run directory for replay not found: %s", args.replay)
+            sys.exit(1)
+        asyncio.run(run_replay(past_run_dir, Path(args.output_dir)))
+        return
 
     _judge_defaults = {
         "gemini": JUDGE_GEMINI_DEFAULT,
