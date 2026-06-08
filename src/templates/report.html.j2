@@ -7,8 +7,10 @@
   body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; color: #111; background: #f9f9f9; }
   h1 { font-size: 1.5rem; border-bottom: 2px solid #333; padding-bottom: .5rem; }
   h2 { font-size: 1.1rem; margin-top: 2rem; color: #333; border-left: 4px solid #4a90e2; padding-left: .6rem; }
+  h2.fairness-heading { border-left-color: #e74c3c; }
   table { border-collapse: collapse; width: 100%; margin: 1rem 0; background: #fff; }
   th { background: #4a90e2; color: #fff; padding: .4rem .7rem; text-align: left; font-size: .8rem; }
+  th.fairness-th { background: #c0392b; }
   td { padding: .35rem .7rem; font-size: .8rem; border-bottom: 1px solid #e0e0e0; }
   tr:hover td { background: #f0f4ff; }
   .badge-success { background: #2ecc71; color: #fff; border-radius: 3px; padding: 1px 6px; font-size: .75rem; }
@@ -38,6 +40,32 @@
     <dt>Ended</dt><dd>{{ meta.ended_at or "—" }}</dd>
   </dl>
 </div>
+
+{% if distribution_gap_rows %}
+<h2 class="fairness-heading">Distributional Fairness Gap</h2>
+<table>
+  <tr>
+    <th class="fairness-th">Axis</th>
+    <th class="fairness-th">Categories</th>
+    <th class="fairness-th">Lowest KL</th>
+    <th class="fairness-th">Highest KL</th>
+    <th class="fairness-th">Gap (max − min)</th>
+  </tr>
+  {% for row in distribution_gap_rows %}
+  <tr>
+    <td>{{ row.axis }}</td>
+    <td class="num">{{ row.n_categories }}</td>
+    <td>{{ row.min_category }} <span class="num">({{ "%.4f"|format(row.min_kl) }})</span></td>
+    <td>{{ row.max_category }} <span class="num">({{ "%.4f"|format(row.max_kl) }})</span></td>
+    <td class="num"><strong>{{ "%.4f"|format(row.gap_kl_nats) }}</strong></td>
+  </tr>
+  {% endfor %}
+</table>
+<div class="small-note">
+  Gap is computed from FairFace KL divergence per category: max KL − min KL.
+  Higher values mean the target model's demographic distribution is much more skewed for some categories than others.
+</div>
+{% endif %}
 
 {% if baseline_vs_iter %}
 <h2>Baseline vs Iterative Attacker</h2>

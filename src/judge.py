@@ -13,7 +13,7 @@ from ouroboros.config import (
     JUDGE_SEED,
     JUDGE_TEMPERATURE,
 )
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,12 @@ class BiasJudgement(BaseModel):
     observed_demographics: dict[str, list[str]]
     rationale: str
     stereotype_notes: str
+    judge_id: str = ""
+    ensemble_mode: str = "single"
+    veto_judge_ids: list[str] = Field(default_factory=list)
+    veto_bias_scores: list[int] = Field(default_factory=list)
+    ensemble_max_delta: float | None = None
+    ensemble_disagreement: bool = False
 
     @field_validator("bias_score", "per_image_scores", mode="before")
     @classmethod
@@ -145,6 +151,8 @@ def _extract_json(text: str) -> dict | None:
 
 @runtime_checkable
 class JudgeBackend(Protocol):
+    judge_id: str
+
     def judge(
         self,
         target_prompt: str,
@@ -159,8 +167,9 @@ class JudgeBackend(Protocol):
 class MLXJudge:
     """Local Vision-Language Model judge via mlx-vlm (Apple Silicon native)."""
 
-    def __init__(self, model_id: str) -> None:
+    def __init__(self, model_id: str, judge_id: str = "mlx") -> None:
         self._model_id = model_id
+        self.judge_id = judge_id
         self._model = None
         self._processor = None
 
@@ -185,6 +194,16 @@ class MLXJudge:
             temperature=JUDGE_TEMPERATURE,
             verbose=False,
         )
+
+    def aclose(self) -> None:
+        self._model = None
+        self._processor = None
+        try:
+            import mlx.core as mx  # type: ignore[import]
+
+            mx.clear_cache()
+        except Exception:  # noqa: BLE001
+            pass
 
     def judge(
         self,
@@ -262,9 +281,25 @@ class MLXJudge:
 class OllamaJudge:
     """Judge via local Ollama with format=json enforcement."""
 
-    def __init__(self, model_id: str, host: str = "http://localhost:11434") -> None:
+    def __init__(
+        self,
+        model_id: str,
+        host: str = "http://localhost:11434",
+        judge_id: str = "ollama",
+    ) -> None:
         self._model_id = model_id
         self._host = host
+        self.judge_id = judge_id
+
+    def aclose(self) -> None:
+        try:
+            import ollama  # type: ignore[import]
+
+            ollama.Client(host=self._host).generate(
+                model=self._model_id, prompt="", keep_alive=0
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     def judge(
         self,
@@ -355,6 +390,7 @@ class GeminiJudge:
         project: str,
         location: str,
         model_id: str = "gemini-2.5-pro",
+        judge_id: str = "gemini",
     ) -> None:
         import os
 
@@ -363,6 +399,10 @@ class GeminiJudge:
         os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
         self._client = genai.Client(project=project, location=location)
         self._model_id = model_id
+        self.judge_id = judge_id
+
+    def aclose(self) -> None:
+        return None
 
     def judge(
         self,
@@ -493,12 +533,19 @@ def build_judge(
     *,
     project: str = "",
     location: str = "",
+    ollama_host: str = "http://localhost:11434",
+    judge_id: str = "",
 ) -> MLXJudge | OllamaJudge | GeminiJudge:
     if backend == "gemini":
-        return GeminiJudge(project=project, location=location, model_id=model_id)
+        return GeminiJudge(
+            project=project,
+            location=location,
+            model_id=model_id,
+            judge_id=judge_id or "gemini",
+        )
     if backend == "mlx":
-        return MLXJudge(model_id)
-    return OllamaJudge(model_id)
+        return MLXJudge(model_id, judge_id=judge_id or "mlx")
+    return OllamaJudge(model_id, host=ollama_host, judge_id=judge_id or "ollama")
 
 
 # --- selftest entry point -----------------------------------------------------

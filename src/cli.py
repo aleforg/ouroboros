@@ -69,13 +69,20 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--max-t2i-calls", type=int, default=None,
                        help="Hard cap on total T2I API calls "
                             "(default: mode-aware — 200 for test, 14000 for full = 175 seeds × M × max_iter)")
-    run_p.add_argument("--seeds-filter", metavar="CATEGORY", default=None,
-                       help="Restrict to a single seed category")
+    run_p.add_argument(
+        "--seeds-filter", metavar="CATEGORY", default=None,
+        help="Restrict to a single seed category",
+    )
     run_p.add_argument("--output-dir", default="results",
                        help="Parent directory for run outputs (default: results/)")
     run_p.add_argument("--attacker-model", default=ATTACKER_DEFAULT)
-    # target (only FLUX supported in v2.3; build_target() factory in
-    # src/targets/base.py is ready for a second backend without breaking the CLI)
+    # target
+    run_p.add_argument(
+        "--target-backend", choices=["flux", "diffusers"], default=TARGET_BACKEND_DEFAULT,
+        dest="target_backend",
+        help="flux: FLUX.2-klein-4B via mflux (Apple Silicon, default) | "
+             "diffusers: FLUX.1-schnell via HuggingFace diffusers (NVIDIA CUDA, RunPod)",
+    )
     run_p.add_argument("--flux-quantize", type=int, choices=[3, 4, 5, 6, 8], default=4,
                        dest="flux_quantize", metavar="BITS")
     run_p.add_argument("--flux-steps", type=int, default=4, dest="flux_steps",
@@ -86,6 +93,18 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--judge-backend", choices=["gemini", "mlx", "ollama"], default=JUDGE_BACKEND_DEFAULT)
     run_p.add_argument("--judge-model", default=None,
                        help="Override judge model (default depends on --judge-backend)")
+    run_p.add_argument("--judge-mode", choices=["single", "cascading", "ensemble"], default="single",
+                       help="single: one judge backend; ensemble/cascading: Gemini anchor + local vetos")
+    run_p.add_argument("--judge-anchor-model", default=None,
+                       help="Override Gemini anchor model for ensemble/cascading mode")
+    run_p.add_argument("--judge-veto1-model", default=None,
+                       help="Override first local veto model (MLX) for ensemble/cascading mode")
+    run_p.add_argument("--judge-veto2-model", default=None,
+                       help="Override second local veto model (Ollama) for ensemble/cascading mode")
+    run_p.add_argument("--disagreement-threshold", type=float, default=None,
+                       help="Bias-score delta above which a veto flags ensemble disagreement")
+    run_p.add_argument("--grey-zone", nargs=2, type=float, metavar=("LOW", "HIGH"), default=None,
+                       help="Cascading mode calls the cloud anchor only when local consensus is inside this range")
     run_p.add_argument("--rate-limit", type=int, default=60, dest="rate_limit_per_min",
                        metavar="PER_MIN")
     run_p.add_argument("--allow-swap", action="store_true",
@@ -122,9 +141,12 @@ def _build_parser() -> argparse.ArgumentParser:
     vj_p.add_argument("--cloud-gap-check", action="store_true")
     vj_p.add_argument("--log-level", default="INFO")
 
-    # ── dashboard (stub) ──────────────────────────────────────────────────────
-    dash_p = sub.add_parser("dashboard", help="[not in v1] Launch Streamlit live monitor")
-    dash_p.add_argument("--port", type=int, default=8501)
+    # ── dashboard ────────────────────────────────────────────────────────────
+    dash_p = sub.add_parser("dashboard", help="Launch the Streamlit web dashboard (M5)")
+    dash_p.add_argument("--port", type=int, default=8501,
+                        help="Port for the Streamlit server (default: 8501)")
+    dash_p.add_argument("--output-dir", default="results", dest="output_dir",
+                        help="Results directory to monitor (default: results/)")
     dash_p.add_argument("--log-level", default="INFO")
 
     return p
@@ -156,8 +178,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     if args.max_t2i_calls is None:
         # Worst case: every seed runs every iter without an early success.
-        # Full mode: 175 seeds (Stable Bias) × M × max_iter = 14000.
-        # Test mode: keep a 200 safety net (2× the 2×5×10 worst case) to absorb retries.
+        # Full mode: 175 Stable Bias profession seeds × M × max_iter = 14000.
+        # Test mode: keep a 200 safety net (2× the 2×5×10 worst case).
         if args.mode == "full":
             args.max_t2i_calls = FULL_BUDGET.m * FULL_BUDGET.max_iter * 175
         else:
@@ -168,15 +190,28 @@ def _cmd_run(args: argparse.Namespace) -> None:
     aggressive_unload = not getattr(args, "no_aggressive_unload", False)
     flux_size = getattr(args, "flux_size", 512)
 
+    target_backend = getattr(args, "target_backend", TARGET_BACKEND_DEFAULT)
     cfg = RunConfig(
         mode=args.mode,
         attacker_model=args.attacker_model,
+        target_backend=target_backend,
         flux_quantize=args.flux_quantize,
         flux_steps=args.flux_steps,
         flux_width=flux_size,
         flux_height=flux_size,
         judge_backend=args.judge_backend,
         judge_model=judge_model,
+        judge_mode=args.judge_mode,
+        judge_anchor_model=args.judge_anchor_model or RunConfig.judge_anchor_model,
+        judge_veto1_model=args.judge_veto1_model or RunConfig.judge_veto1_model,
+        judge_veto2_model=args.judge_veto2_model or RunConfig.judge_veto2_model,
+        disagreement_threshold=(
+            args.disagreement_threshold
+            if args.disagreement_threshold is not None
+            else RunConfig.disagreement_threshold
+        ),
+        grey_zone_lo=args.grey_zone[0] if args.grey_zone else RunConfig.grey_zone_lo,
+        grey_zone_hi=args.grey_zone[1] if args.grey_zone else RunConfig.grey_zone_hi,
         max_t2i_calls=args.max_t2i_calls,
         rate_limit_per_min=args.rate_limit_per_min,
         output_dir=args.output_dir,
@@ -189,16 +224,22 @@ def _cmd_run(args: argparse.Namespace) -> None:
         google_cloud_location=google_location,
     )
 
-    # RAM budget check — use the FLUX quantization key into MODEL_SIZE_REGISTRY
-    _target_registry_key = f"flux2-klein-4b-q{cfg.flux_quantize}"
-    ok, msg = check_ram_budget(
-        cfg.attacker_model, _target_registry_key, RAM_BUDGET_GB, cfg.aggressive_unload
-    )
-    if not ok and not cfg.allow_swap:
-        logger.error(msg)
-        sys.exit(1)
-    elif msg:
-        logger.warning(msg)
+    # RAM budget check — mflux only (diffusers target lives on VRAM, not system RAM)
+    if cfg.target_backend == "flux":
+        _target_registry_key = f"flux2-klein-4b-q{cfg.flux_quantize}"
+        ok, msg = check_ram_budget(
+            cfg.attacker_model, _target_registry_key, RAM_BUDGET_GB, cfg.aggressive_unload
+        )
+        if not ok and not cfg.allow_swap:
+            logger.error(msg)
+            sys.exit(1)
+        elif msg:
+            logger.warning(msg)
+    else:
+        logger.info(
+            "target_backend=%s: skipping system RAM budget check (VRAM-based target).",
+            cfg.target_backend,
+        )
 
     # Load seeds
     seeds = load_full_seeds() if cfg.mode == "full" else load_test_seeds()
@@ -209,8 +250,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     logger.info(
-        "═══ ouroboros run ═══  mode=%s  seeds=%d  target=flux  judge=%s/%s  attacker=%s  unload=%s",
-        cfg.mode, len(seeds), cfg.judge_backend, cfg.judge_model,
+        "═══ ouroboros run ═══  mode=%s  seeds=%d  target=%s  judge=%s/%s/%s  attacker=%s  unload=%s",
+        cfg.mode, len(seeds), cfg.target_backend,
+        cfg.judge_mode, cfg.judge_backend, cfg.judge_model,
         cfg.attacker_model, cfg.aggressive_unload,
     )
 
@@ -236,7 +278,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
 async def _async_run(cfg: RunConfig, seeds: list, args: argparse.Namespace) -> None:
     from ouroboros.targets import build_target
-    from ouroboros.judge import build_judge
+    from ouroboros.ensemble_judge import build_ensemble
     from ouroboros.attacker import OllamaAttacker
     from ouroboros.storage import make_run_dir, write_meta, update_meta_ended, JSONLWriter
     from ouroboros.loop import run_pair_loop
@@ -260,12 +302,7 @@ async def _async_run(cfg: RunConfig, seeds: list, args: argparse.Namespace) -> N
         flux_width=cfg.flux_width,
         flux_height=cfg.flux_height,
     )
-    judge = build_judge(
-        cfg.judge_backend,
-        cfg.judge_model,
-        project=cfg.google_cloud_project,
-        location=cfg.google_cloud_location,
-    )
+    judge = build_ensemble(cfg)
     attacker = OllamaAttacker(model=cfg.attacker_model, host=cfg.ollama_host)
 
     if cfg.run_baseline:
@@ -344,7 +381,41 @@ def _cmd_validate_judge(args: argparse.Namespace) -> None:
 
 def _cmd_dashboard(args: argparse.Namespace) -> None:
     _setup_logging(args.log_level)
-    logger.info("dashboard is not implemented in v1 (see M5 in SPEC §19).")
+    import subprocess as _subprocess
+
+    try:
+        import streamlit  # noqa: F401
+    except ImportError:
+        logger.error(
+            "Streamlit is not installed. "
+            "Install the web extra with:  pip install -e '.[web]'"
+        )
+        sys.exit(1)
+
+    app_path = Path(__file__).parent / "web" / "app.py"
+    if not app_path.exists():
+        logger.error("Dashboard app not found at %s", app_path)
+        sys.exit(1)
+
+    output_dir = Path(getattr(args, "output_dir", "results")).resolve()
+    env = os.environ.copy()
+    env["OUROBOROS_RESULTS_DIR"] = str(output_dir)
+
+    cmd = [
+        sys.executable, "-m", "streamlit", "run", str(app_path),
+        f"--server.port={args.port}",
+        "--server.headless=false",
+        "--browser.gatherUsageStats=false",
+    ]
+    logger.info(
+        "Launching Ouroboros dashboard on http://localhost:%d  (results: %s)",
+        args.port,
+        output_dir,
+    )
+    try:
+        _subprocess.run(cmd, env=env)
+    except KeyboardInterrupt:
+        logger.info("Dashboard stopped.")
 
 
 # --- entry point --------------------------------------------------------------

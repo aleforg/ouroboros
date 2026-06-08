@@ -20,6 +20,7 @@ from ouroboros.metrics import (
     per_category,
     summary_per_seed,
 )
+from ouroboros.metrics.fairness import distribution_gap_summary
 
 logger = logging.getLogger(__name__)
 
@@ -201,8 +202,14 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
     variance_df = intra_batch_variance(run_df) if not run_df.empty else None
 
     fairface_df = None
+    distribution_gap_df = None
     if not skip_fairface and not run_df.empty:
         fairface_df = _run_fairface_pipeline(run_dir, run_df)
+        if fairface_df is not None and not fairface_df.empty:
+            distribution_gap_df = distribution_gap_summary(fairface_df)
+            if not distribution_gap_df.empty:
+                distribution_gap_df.to_csv(report_dir / "distribution_gap.csv", index=False)
+                logger.info("  distribution_gap.csv             → %d rows", len(distribution_gap_df))
 
     clusters_data: list[dict] = []
     if not run_df.empty and "strategy_label" in run_df.columns:
@@ -275,6 +282,11 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         asr_chart_svg=asr_chart_svg,
         variance_rows=variance_df.to_dict("records") if variance_df is not None and not variance_df.empty else [],
         fairface_rows=fairface_df.to_dict("records") if fairface_df is not None and not fairface_df.empty else [],
+        distribution_gap_rows=(
+            distribution_gap_df.to_dict("records")
+            if distribution_gap_df is not None and not distribution_gap_df.empty
+            else []
+        ),
         axis_names=axis_names,
         axis_rows=axis_rows,
     )
@@ -288,6 +300,8 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
     logger.info("  intra_batch_variance.csv       → %d rows", len(variance_df) if variance_df is not None else 0)
     if fairface_df is not None and not fairface_df.empty:
         logger.info("  fairface_per_category.csv      → %d rows", len(fairface_df))
+    if distribution_gap_df is not None and not distribution_gap_df.empty:
+        logger.info("  distribution_gap.csv           → %d rows", len(distribution_gap_df))
     logger.info("  strategy_clusters              → %d clusters", len(clusters_data))
     logger.info("  report.html                    → self-contained")
 
@@ -342,6 +356,7 @@ def _render_html(
     asr_chart_svg: str,
     variance_rows: list[dict],
     fairface_rows: list[dict],
+    distribution_gap_rows: list[dict],
     axis_names: list[str],
     axis_rows: list[dict],
 ) -> str:
@@ -363,6 +378,7 @@ def _render_html(
         asr_chart_svg=asr_chart_svg,
         variance_rows=variance_rows,
         fairface_rows=fairface_rows,
+        distribution_gap_rows=distribution_gap_rows,
         axis_names=axis_names,
         axis_rows=axis_rows,
     )

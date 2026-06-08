@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Categories the framework knows about. The 6 demographic categories are
 # legacy (used by load_test_seeds() for the 10 smoke-test seeds). The
@@ -19,6 +23,15 @@ ALLOWED_CATEGORIES: frozenset[str] = frozenset({
     "gender-ethnicity",
     "ethnicity-socio_economics",
     "profession",
+    "male_coded",
+    "female_coded",
+    "balanced",
+})
+
+PROFESSION_GROUPS: frozenset[str] = frozenset({
+    "male_coded",
+    "female_coded",
+    "balanced",
 })
 
 
@@ -92,6 +105,32 @@ FULL_SEEDS_PATH = (
     Path(__file__).resolve().parent.parent / "data" / "stable_bias_prompts.jsonl"
 )
 
+PROFESSION_GROUPS_PATH = (
+    Path(__file__).resolve().parent.parent / "data" / "profession_groups.json"
+)
+
+DEFAULT_PROFESSION_GROUP = "balanced"
+
+
+@lru_cache(maxsize=1)
+def load_profession_groups(path: Path | None = None) -> dict[str, str]:
+    """Load profession → BLS gender-stereotype group mapping."""
+    src = path or PROFESSION_GROUPS_PATH
+    if not src.exists():
+        logger.warning(
+            "Profession-group map not found at %s; defaulting professions to %r.",
+            src,
+            DEFAULT_PROFESSION_GROUP,
+        )
+        return {}
+    raw = json.loads(src.read_text(encoding="utf-8"))
+    mapping = raw.get("mapping", raw)
+    return {
+        str(prof): str(group)
+        for prof, group in mapping.items()
+        if str(group) in PROFESSION_GROUPS
+    }
+
 
 def load_full_seeds(path: Path | None = None) -> list[Seed]:
     """Load the 175-prompt Stable Bias professions dataset.
@@ -102,9 +141,10 @@ def load_full_seeds(path: Path | None = None) -> list[Seed]:
     not specified so the framework can measure what the T2I model
     spontaneously generates.
 
-    All seeds have category="profession". Sub-categorization (occupation
-    clusters) and intersectional ablation are tracked as future work in
-    docs/09-future-intersectional-ablation.md.
+    Seeds are grouped by BLS-derived gender-stereotype direction
+    (male_coded/female_coded/balanced) so distributional FairFace metrics can
+    report gaps across stereotype directions instead of one constant
+    "profession" bucket.
     """
     src = path or FULL_SEEDS_PATH
     if not src.exists():
@@ -114,6 +154,7 @@ def load_full_seeds(path: Path | None = None) -> list[Seed]:
             "(or rerun the one-liner from CLAUDE.md / docs/05-dataset.md)."
         )
 
+    groups = load_profession_groups()
     seeds: list[Seed] = []
     with src.open() as fh:
         for line_no, line in enumerate(fh, 1):
@@ -121,12 +162,14 @@ def load_full_seeds(path: Path | None = None) -> list[Seed]:
             if not line:
                 continue
             row = json.loads(line)
+            profession = row["profession"]
+            category = groups.get(profession, DEFAULT_PROFESSION_GROUP)
             seeds.append(
                 Seed(
                     seed_id=row["id"],
-                    category="profession",
+                    category=category,
                     base_scene=row["prompt"],
-                    source_text=row["profession"],
+                    source_text=profession,
                 )
             )
     return seeds

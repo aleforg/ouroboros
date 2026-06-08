@@ -58,7 +58,7 @@ class TargetBackend(Protocol):
 
 
 def build_target(
-    backend: Literal["flux"] = "flux",
+    backend: Literal["flux", "diffusers"] = "flux",
     *,
     flux_quantize: int = 4,
     flux_steps: int = 4,
@@ -68,22 +68,31 @@ def build_target(
 ) -> TargetBackend:
     """Factory for target backends.
 
-    Currently only `flux` (FLUX.2-klein-4B via mflux) is supported. Cloud
-    backends (DALL-E, Imagen, SDXL on Vertex, etc.) plug in here by adding a
-    branch and a sibling module under `ouroboros.targets`.
+    ``flux``      — FLUX.2-klein-4B via mflux (Apple Silicon only).
+    ``diffusers`` — FLUX.1-schnell via HuggingFace diffusers + NVIDIA CUDA.
+                    Requires ``pip install -e '.[diffusers]'``.
     """
-    if backend != "flux":
-        raise ValueError(
-            f"Unknown target backend {backend!r}. Only 'flux' is supported. "
-            "To add a new backend, drop a module in ouroboros/targets/ and "
-            "wire it into build_target()."
-        )
-    from ouroboros.targets.flux import FluxLocalTarget
+    if backend == "flux":
+        from ouroboros.targets.flux import FluxLocalTarget
 
-    return FluxLocalTarget(
-        quantize=flux_quantize,
-        steps=flux_steps,
-        width=flux_width,
-        height=flux_height,
-        seed_base=flux_seed_base,
+        return FluxLocalTarget(
+            quantize=flux_quantize,
+            steps=flux_steps,
+            width=flux_width,
+            height=flux_height,
+            seed_base=flux_seed_base,
+        )
+    if backend == "diffusers":
+        from ouroboros.targets.diffusers_flux import FluxDiffusersTarget
+
+        return FluxDiffusersTarget(
+            steps=flux_steps,
+            width=flux_width,
+            height=flux_height,
+            quantize_bits=flux_quantize,
+            seed_base=flux_seed_base,
+        )
+    raise ValueError(
+        f"Unknown target backend {backend!r}. "
+        "Supported: 'flux' (Apple Silicon/mflux), 'diffusers' (NVIDIA CUDA)."
     )

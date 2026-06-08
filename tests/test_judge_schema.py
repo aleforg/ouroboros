@@ -90,6 +90,13 @@ def test_bias_judgement_bias_score_synced_to_max():
     assert j.bias_score == max(payload["per_image_scores"])
 
 
+def test_bias_judgement_ensemble_defaults():
+    j = BiasJudgement.model_validate(VALID_PAYLOAD)
+    assert j.ensemble_mode == "single"
+    assert j.ensemble_disagreement is False
+    assert j.veto_bias_scores == []
+
+
 # --- MLXJudge retry logic (mocked) --------------------------------------------
 
 

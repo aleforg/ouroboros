@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -81,6 +82,14 @@ async def run_one_seed(
             break
 
         ts_start = datetime.now(timezone.utc)
+        _write_live(run_dir, {
+            "seed_id": seed.seed_id,
+            "category": seed.category,
+            "base_scene": seed.base_scene,
+            "iter": iter_idx,
+            "max_iter": budget.max_iter,
+            "phase": "attacking",
+        })
 
         # --- attacker proposes a prompt ---
         if ram_monitor:
@@ -91,6 +100,14 @@ async def run_one_seed(
 
         if candidate is None:
             logger.warning("Attacker refused/failed at iter %d — skipping iter", iter_idx)
+            _write_live(run_dir, {
+                "seed_id": seed.seed_id,
+                "category": seed.category,
+                "base_scene": seed.base_scene,
+                "iter": iter_idx,
+                "max_iter": budget.max_iter,
+                "phase": "attacker_refused",
+            })
             _write_record(
                 writer, run_dir, seed, cfg, iter_idx,
                 target_prompt=seed.base_scene,
@@ -107,6 +124,18 @@ async def run_one_seed(
 
         target_prompt = candidate.target_prompt
         m = budget.m
+        _write_live(run_dir, {
+            "seed_id": seed.seed_id,
+            "category": seed.category,
+            "base_scene": seed.base_scene,
+            "iter": iter_idx,
+            "max_iter": budget.max_iter,
+            "phase": "generating",
+            "strategy_label": candidate.strategy_label,
+            "attacker_rationale": candidate.rationale,
+            "target_prompt": target_prompt,
+            "m": m,
+        })
 
         # --- lifecycle: unload attacker before target ---
         if cfg.aggressive_unload:
@@ -149,6 +178,17 @@ async def run_one_seed(
             )
             memory.add(mem_entry)
             ram_compact = ram_monitor.compact_record(seed.seed_id, iter_idx) if ram_monitor else {}
+            _write_live(run_dir, {
+                "seed_id": seed.seed_id,
+                "category": seed.category,
+                "base_scene": seed.base_scene,
+                "iter": iter_idx,
+                "max_iter": budget.max_iter,
+                "phase": "refused",
+                "strategy_label": candidate.strategy_label,
+                "attacker_rationale": candidate.rationale,
+                "target_prompt": target_prompt,
+            })
             _write_record(
                 writer, run_dir, seed, cfg, iter_idx,
                 target_prompt=target_prompt,
@@ -165,6 +205,18 @@ async def run_one_seed(
 
         # --- judge ---
         judge_result: BiasJudgement | None = None
+        _write_live(run_dir, {
+            "seed_id": seed.seed_id,
+            "category": seed.category,
+            "base_scene": seed.base_scene,
+            "iter": iter_idx,
+            "max_iter": budget.max_iter,
+            "phase": "judging",
+            "strategy_label": candidate.strategy_label,
+            "attacker_rationale": candidate.rationale,
+            "target_prompt": target_prompt,
+            "samples": [s["path"] for s in samples if s.get("outcome") == "image" and s.get("path")],
+        })
         if image_bytes_list:
             judge_result = judge.judge(
                 target_prompt=target_prompt,
@@ -177,6 +229,17 @@ async def run_one_seed(
         ram_compact = ram_monitor.compact_record(seed.seed_id, iter_idx) if ram_monitor else {}
 
         if judge_result is None:
+            _write_live(run_dir, {
+                "seed_id": seed.seed_id,
+                "category": seed.category,
+                "base_scene": seed.base_scene,
+                "iter": iter_idx,
+                "max_iter": budget.max_iter,
+                "phase": "judge_error",
+                "strategy_label": candidate.strategy_label,
+                "attacker_rationale": candidate.rationale,
+                "target_prompt": target_prompt,
+            })
             _write_record(
                 writer, run_dir, seed, cfg, iter_idx,
                 target_prompt=target_prompt,
@@ -200,6 +263,24 @@ async def run_one_seed(
             stereotype_threshold=budget.stereotype_threshold,
         )
         outcome = LABEL_SUCCESS if success else LABEL_FAIL
+        _write_live(run_dir, {
+            "seed_id": seed.seed_id,
+            "category": seed.category,
+            "base_scene": seed.base_scene,
+            "iter": iter_idx,
+            "max_iter": budget.max_iter,
+            "phase": "iter_done",
+            "strategy_label": candidate.strategy_label,
+            "attacker_rationale": candidate.rationale,
+            "target_prompt": target_prompt,
+            "samples": [s["path"] for s in samples if s.get("outcome") == "image" and s.get("path")],
+            "outcome": outcome,
+            "bias_score": judge_result.bias_score,
+            "per_image_scores": judge_result.per_image_scores,
+            "per_axis_scores": judge_result.per_axis_scores,
+            "stereotype_framing": judge_result.per_axis_scores.get("stereotype_framing", 0),
+            "judge_rationale": judge_result.rationale,
+        })
 
         mem_entry = MemoryEntry(
             iter=iter_idx,
@@ -283,6 +364,17 @@ def _write_record(
     writer.append(record)
 
 
+def _write_live(run_dir: Path, payload: dict) -> None:
+    """Atomically overwrite run_dir/live.json with intra-iteration state."""
+    try:
+        payload = {**payload, "updated_at": datetime.now(timezone.utc).isoformat()}
+        tmp = run_dir / "live.json.tmp"
+        tmp.write_text(json.dumps(payload, default=str), encoding="utf-8")
+        tmp.replace(run_dir / "live.json")
+    except Exception:
+        pass
+
+
 # --- outer driver -------------------------------------------------------------
 
 
@@ -331,5 +423,6 @@ async def run_pair_loop(
 
         write_checkpoint(run_dir, run_id, cfg, completed_seed_ids, global_calls)
 
+    _write_live(run_dir, {"phase": "finished"})
     logger.info("PAIR loop complete — %d/%d seeds processed, %d T2I calls total",
                 len(completed_seed_ids), len(seeds), global_calls)

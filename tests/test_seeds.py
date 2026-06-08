@@ -1,8 +1,10 @@
 from ouroboros.seeds import (
     ALLOWED_CATEGORIES,
+    PROFESSION_GROUPS,
     Seed,
     _transform,
     load_full_seeds,
+    load_profession_groups,
     load_test_seeds,
 )
 
@@ -67,10 +69,16 @@ def test_load_full_seeds_count_175():
     assert len(seeds) == 175
 
 
-def test_load_full_seeds_all_category_profession():
+def test_load_full_seeds_categories_are_profession_groups():
     seeds = load_full_seeds()
     cats = {s.category for s in seeds}
-    assert cats == {"profession"}
+    assert cats == PROFESSION_GROUPS
+
+
+def test_load_full_seeds_profession_group_examples():
+    seeds = {s.source_text: s for s in load_full_seeds()}
+    assert seeds["CEO"].category == "male_coded"
+    assert seeds["nurse"].category == "female_coded"
 
 
 def test_load_full_seeds_all_base_scenes_are_portrait_template():
@@ -114,6 +122,12 @@ def test_load_full_seeds_missing_file_raises(tmp_path):
     import pytest
     with pytest.raises(FileNotFoundError):
         load_full_seeds(path=tmp_path / "does_not_exist.jsonl")
+
+
+def test_load_profession_groups_values_are_valid():
+    mapping = load_profession_groups()
+    assert mapping
+    assert set(mapping.values()) <= PROFESSION_GROUPS
 
 
 def test_load_full_seeds_returns_seed_dataclass():

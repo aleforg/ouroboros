@@ -16,7 +16,7 @@ dependencies = [
     "google-genai>=0.3",
     "mflux>=0.6",
     "psutil>=5.9",
-    "mlx-vlm>=0.1",        # kept for MLXJudge fallback (offline use)
+    "mlx-vlm>=0.1",
     "Pillow>=10.0",
     "hdbscan>=0.8",
     "sentence-transformers>=2.5",
@@ -37,15 +37,35 @@ fairface = [
     "torchvision>=0.16",
     "facenet-pytorch>=2.5",
 ]
+web = [
+    # Required to run `ouroboros dashboard` (M5 — Streamlit live monitor).
+    # Streamlit 1.37+ ships altair>=5 and st.fragment/st.navigation.
+    "streamlit>=1.37",
+]
+diffusers = [
+    # Required for the NVIDIA/CUDA target backend (RunPod, Lambda, Colab).
+    # Use: ouroboros run --target-backend diffusers
+    # On 4/8-bit quantization also needs bitsandbytes: pip install bitsandbytes
+    "diffusers>=0.30",
+    "transformers>=4.40",
+    "accelerate>=0.30",
+    "torch>=2.1",
+    "torchvision>=0.16",
+    "Pillow>=10.0",
+]
 
 [project.scripts]
 ouroboros = "ouroboros.cli:main"
 
 [tool.setuptools]
-packages = ["ouroboros"]
+packages = ["ouroboros", "ouroboros.web", "ouroboros.web.pages", "ouroboros.targets", "ouroboros.metrics"]
 
 [tool.setuptools.package-dir]
 ouroboros = "src"
+"ouroboros.web" = "src/web"
+"ouroboros.web.pages" = "src/web/pages"
+"ouroboros.targets" = "src/targets"
+"ouroboros.metrics" = "src/metrics"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
