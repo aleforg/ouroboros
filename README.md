@@ -29,6 +29,12 @@ Per la pipeline FairFace post-hoc (opzionale):
 pip install -e ".[fairface]"
 ```
 
+Per la dashboard web (opzionale, richiede Streamlit ≥ 1.37):
+
+```bash
+pip install -e ".[web]"
+```
+
 Scaricare manualmente i pesi `res34_fair_align_multi_7_20190809.pt` da [joojs/fairface](https://github.com/joojs/fairface) in `~/.cache/ouroboros/fairface/` (oppure puntare con `OUROBOROS_FAIRFACE_WEIGHTS`).
 
 Variabili d'ambiente richieste (vedi `.env.example`):
@@ -62,6 +68,20 @@ ouroboros report <run_id>                              # CSV + report.html self-
 ouroboros report <run_id> --no-fairface                # salta la pipeline FairFace
 ouroboros aggregate <run_id_1> <run_id_2> [...]        # media±std cross-run
 ```
+
+## Dashboard web (M5)
+
+```bash
+ouroboros dashboard                  # apre http://localhost:8501
+ouroboros dashboard --port 8080      # porta custom
+ouroboros dashboard --output-dir /path/to/results
+```
+
+La dashboard Streamlit offre quattro pagine:
+- **⚡ Launch** — form completo per configurare e avviare un run (tutti i flag di `ouroboros run`), con pre-flight RAM check e anteprima dei seed.
+- **📡 Monitor** — live monitoring di un run in corso: progress bar, tabella delle ultime iterazioni, immagini generate, consumo RAM. Si aggiorna automaticamente ogni 2 s. Include un pannello **"Current iteration"** in tempo reale con la strategia corrente dell'attacker, il rationale, il prompt inviato al target, l'anteprima delle immagini in fase di analisi da parte del judge, e il giudizio completo (bias score, assi, stereotype_framing) non appena l'iterazione si conclude.
+- **📊 Results** — report interattivo per un run completato: ASR per categoria, chart ASR vs. iterazioni, score per asse del judge, gallery immagini, cluster di strategia.
+- **🔀 Compare** — aggregazione cross-run: ASR medio ± std per categoria, stabilità per seed.
 
 Test:
 

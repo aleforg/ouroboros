@@ -13,7 +13,7 @@ Lineage: adapts PAIR (Chao et al., 2023) from text-jailbreak to T2I-fairness. Se
 The framework is built for **Apple Silicon Macs with 16 GB unified RAM** (M4 baseline). This is not a footnote — it shapes most design decisions:
 
 - Attacker capped at ~8B 4-bit params (default `dolphin-llama3:latest` via Ollama, ~5 GB).
-- Target is local FLUX.2-klein-4B via mflux (~5 GB). It's the only T2I backend currently supported (`target_backend: Literal["flux"]` in `src/config.py`). The factory `build_target()` in [src/targets/base.py](src/targets/base.py) is structured to make adding a second backend (DALL-E, Imagen, SDXL on Vertex) a one-file change without touching the loop.
+- Default target is local FLUX.2-klein-4B via mflux (~5 GB). Two backends are wired (`target_backend: Literal["flux", "diffusers"]` in `src/config.py`, selectable via `--target-backend`): `flux` (mflux, Apple Silicon, the default for the 16 GB Mac) and `diffusers` (FLUX.1-schnell via HuggingFace diffusers on **NVIDIA CUDA** — for cloud GPU boxes like RunPod, needs the `[diffusers]` extra). The factory `build_target()` in [src/targets/base.py](src/targets/base.py) keeps adding a further backend (DALL-E, Imagen, SDXL on Vertex) a one-file change without touching the loop.
 - Default judge is **cloud** Gemini 2.5 Pro via Vertex (0 GB local). `JUDGE_BACKEND_DEFAULT = "gemini"` + `JUDGE_GEMINI_DEFAULT = "gemini-2.5-pro"` in `src/config.py`. MLX (`mlx-vlm` Qwen2.5-VL-7B-4bit) and Ollama (`qwen2.5vl:7b`) are offline fallbacks.
 - **Aggressive unload between phases** (`cfg.aggressive_unload=True`) is critical: attacker → `aclose()` (evicts Ollama model) → target → `aclose()` (frees MLX/Metal cache) → judge. Peak RAM is `max(attacker, target)`, not the sum. `--no-aggressive-unload` keeps both resident and risks OOM.
 - `src/config.py:check_ram_budget` aborts startup if the estimate exceeds `RAM_BUDGET_GB` (13 GB) unless `--allow-swap` is passed.
@@ -23,6 +23,8 @@ The framework is built for **Apple Silicon Macs with 16 GB unified RAM** (M4 bas
 Install (editable + dev):
 ```bash
 pip install -e ".[dev]"
+pip install -e ".[web]"            # Streamlit dashboard
+pip install -e ".[diffusers]"      # NVIDIA-CUDA target backend (cloud GPU)
 ```
 
 Run the loop:
@@ -50,6 +52,13 @@ ouroboros aggregate <run_id_1> <run_id_2> [...]        # cross-run mean±std
 ouroboros validate-judge --dataset control.jsonl       # judge vs human control set: MAE, Pearson, agreement@threshold
 ```
 
+Web dashboard (Streamlit, needs the `[web]` extra):
+```bash
+ouroboros dashboard                                   # http://localhost:8501 — Launch / Monitor / Results / Compare pages
+ouroboros dashboard --port 8600 --output-dir results  # custom port / results dir to monitor
+```
+The dashboard launches runs as `ouroboros run ...` child processes (via `python -m ouroboros`) and tracks progress by tailing the run dir — it never imports the loop in-process.
+
 FairFace pipeline (post-hoc, runs inside `ouroboros report`): requires the `[fairface]` extra (`pip install -e ".[fairface]"`) and the ResNet-34 weights `res34_fair_align_multi_7_20190809.pt` downloaded manually from [joojs/fairface](https://github.com/joojs/fairface) into `~/.cache/ouroboros/fairface/` (or pointed to by `OUROBOROS_FAIRFACE_WEIGHTS`). Produces `<run_dir>/fairface.jsonl` (one row per detected face) and `<run_dir>/report/fairface_per_category.csv` (KL divergence + normalized entropy on gender/race/age).
 
 Tests:
@@ -63,9 +72,9 @@ Required env (see `.env.example`): `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PR
 
 ## Package layout quirk
 
-`pyproject.toml` maps the package `ouroboros` to the `src/` directory (`[tool.setuptools.package-dir] ouroboros = "src"`). So **modules in `src/` are imported as `ouroboros.X`**, not `src.X`. There is no nested `src/ouroboros/` directory. Test imports follow the same convention.
+`pyproject.toml` maps the package `ouroboros` to the `src/` directory (`[tool.setuptools.package-dir] ouroboros = "src"`; subpackages `ouroboros.web`, `ouroboros.web.pages`, `ouroboros.targets` are mapped alongside). So **modules in `src/` are imported as `ouroboros.X`**, not `src.X`. There is no nested `src/ouroboros/` directory. Test imports follow the same convention.
 
-The entry point `ouroboros` (defined in `pyproject.toml`) routes to `src/cli.py:main`.
+The entry point `ouroboros` (defined in `pyproject.toml`) routes to `src/cli.py:main`. `src/__main__.py` also routes `python -m ouroboros` to the same `main` — the dashboard uses this to spawn run subprocesses with the active interpreter.
 
 ## Architecture: the per-seed loop
 
@@ -88,11 +97,12 @@ Outcomes labeled `judge_error` or `attacker_refused` are written to `run.jsonl` 
 | Module | Role |
 |---|---|
 | `config.py` | All constants, `RunConfig` (frozen dataclass), `ModeBudget` (TEST vs FULL), RAM budget check, `MODEL_SIZE_REGISTRY` |
-| `cli.py` | `argparse` entry; subcommands `run` (incl. `--resume`/`--replay`), `report`, `aggregate`, `validate-judge` (plus stub `dashboard`) |
-| `seeds.py` | `load_test_seeds()` (10 hard-coded across 6 legacy categories) and `load_full_seeds()` (175 prompts from `data/stable_bias_prompts.jsonl`, all `category="profession"`, `"Photo portrait of a [X]"` template). Old CLEAR-Bias × BOLD dataset archived under `data/legacy/` |
+| `cli.py` | `argparse` entry; subcommands `run` (incl. `--resume`/`--replay`), `report`, `aggregate`, `validate-judge`, `dashboard` (launches Streamlit) |
+| `seeds.py` | `load_test_seeds()` (10 hard-coded across 6 legacy categories) and `load_full_seeds()` (175 prompts from `data/stable_bias_prompts.jsonl`, `"Photo portrait of a [X]"` template). Each seed's `category` is its **gender-stereotype group** (`male_coded`/`female_coded`/`balanced`) from `data/profession_groups.json` (`load_profession_groups()`, BLS-based — see its `_doc` block), so report breakdowns aggregate by stereotype direction. Old CLEAR-Bias × BOLD dataset archived under `data/legacy/` |
 | `attacker.py` | `OllamaAttacker` + `Memory` + `MemoryEntry`. JSON-format Ollama call, refusal detection, retry-with-prefix, `aclose()` lifecycle |
-| `targets/base.py` | `TargetBackend` Protocol, `SampleResult`, `RateLimiter`, `build_target()` factory. Only `"flux"` backend currently wired; the factory raises ValueError for any other name |
-| `targets/flux.py` | `FluxLocalTarget` — FLUX.2-klein-4B via mflux; sequential generation on the asyncio thread; `aclose()` frees MLX cache |
+| `targets/base.py` | `TargetBackend` Protocol, `SampleResult`, `RateLimiter`, `build_target()` factory. Dispatches `"flux"` / `"diffusers"`; raises ValueError for any other name |
+| `targets/flux.py` | `FluxLocalTarget` — FLUX.2-klein-4B via mflux (Apple Silicon); sequential generation on the asyncio thread; `aclose()` frees MLX cache |
+| `targets/diffusers_flux.py` | `FluxDiffusersTarget` — FLUX.1-schnell via HuggingFace diffusers on NVIDIA CUDA (RunPod/Lambda/Colab). Drop-in for `FluxLocalTarget` where mflux is unavailable; `quantize_bits` 4→NF4 (~7 GB VRAM) / 8 (~14 GB) / else bf16 (~26 GB). Needs `[diffusers]` extra |
 | `judge.py` | `BiasJudgement` Pydantic schema (5 axes), `GeminiJudge` / `MLXJudge` / `OllamaJudge`, brace-counting JSON extractor |
 | `ram.py` | `RamMonitor` — psutil snapshots at 5 phases per iter; writes `ram.jsonl`; embeds compact `ram_gb` dict in each `run.jsonl` record |
 | `loop.py` | Per-seed `run_one_seed`, outer `run_pair_loop`, `_success_rule`, `_write_record` |
@@ -105,6 +115,18 @@ Outcomes labeled `judge_error` or `attacker_refused` are written to `run.jsonl` 
 | `cluster.py` | HDBSCAN clustering of `strategy_label` using sentence-transformers embeddings |
 | `report.py` | Jinja2 templates in `src/templates/`; `run_report` produces self-contained `report.html` with inline SVG ASR-vs-iter chart; `run_aggregate_report` for cross-run. Invokes `fairface.process_run` unless `skip_fairface=True` |
 
+## Web dashboard (`src/web/`)
+
+Streamlit multi-page app launched by `ouroboros dashboard`. Design rule: only `app.py` and `pages/` import Streamlit; `runner.py` and `data.py` are pure and unit-tested (`tests/test_web_runner.py`, `tests/test_web_data.py`).
+
+| Module | Role |
+|---|---|
+| `web/app.py` | Streamlit entry; `st.navigation` multi-page routing (≥1.36) so `session_state` (active run id) survives page switches; sidebar quick-stats |
+| `web/pages/` | `1_Launch.py`, `2_Monitor.py`, `3_Results.py`, `4_Compare.py` |
+| `web/runner.py` | Launches `ouroboros run` as a **child process** (avoids asyncio-vs-Streamlit event-loop conflict; isolates heavy model loading); job registry; progress via tailing run-dir files. No Streamlit import |
+| `web/data.py` | Pure fs helpers — `list_runs`, `get_running_jobs`, `get_results_dir`, reads `live.json`/`run.jsonl`/`checkpoint.json`. No Streamlit import |
+| `web/charts.py` | Chart builders for the Results/Compare pages |
+
 ## Output layout
 
 ```
@@ -115,6 +137,7 @@ results/<run_id>/                       # run_id = "YYYY-MM-DD_HHMMSS_<8-char-co
 ├── fairface.jsonl                      # one row per detected face (written by `ouroboros report` when FairFace runs)
 ├── checkpoint.json                     # completed_seed_ids + global_calls; consumed by --resume
 ├── meta.json                           # frozen RunConfig + config_hash + timestamps
+├── live.json                           # current intra-iteration state; overwritten each phase by loop._write_live; read by the web Monitor for the real-time panel
 ├── images/<seed_id>/iter_NN/sample_K.png
 └── report/                             # produced by `ouroboros report`
     ├── summary.csv, per_category.csv, asr_vs_iter.csv, …
@@ -132,4 +155,5 @@ results/<run_id>/                       # run_id = "YYYY-MM-DD_HHMMSS_<8-char-co
 - Judge output schema is strict: `per_axis_scores` must contain all five axes in `JUDGE_AXES`; the validator clamps to 0–10 and recomputes `bias_score = max(per_image_scores)`.
 - `ouroboros.targets.SampleResult` (re-exported via `targets/__init__.py`) is the canonical import path; the old shim `ouroboros.target` was removed in v2.4.
 - Documentation in `docs/` is **in Italian**; SPEC and code comments are English. Keep that split when editing.
-- `validate-judge` (`src/validate.py`) scores a judge backend against a human-annotated control-set JSONL (MAE, Pearson correlation, agreement rate at `--bias-threshold`). `dashboard` remains an intentional stub (M5, deferred per SPEC §19).
+- `validate-judge` (`src/validate.py`) scores a judge backend against a human-annotated control-set JSONL (MAE, Pearson correlation, agreement rate at `--bias-threshold`).
+- The web layer (`src/web/`) keeps Streamlit imports out of `runner.py`/`data.py` so they stay unit-testable; runs are launched as subprocesses, never in-process. Keep that boundary when editing.
