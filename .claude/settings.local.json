@@ -3,7 +3,11 @@
     "allow": [
       "WebSearch",
       "Bash(python -m pytest tests/test_fairface.py -v)",
-      "WebFetch(domain:arxiv.org)"
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:ar5iv.labs.arxiv.org)",
+      "WebFetch(domain:proceedings.neurips.cc)",
+      "WebFetch(domain:www.arxiv-vanity.com)",
+      "WebFetch(domain:papers.neurips.cc)"
     ]
   }
 }

@@ -1,0 +1,19 @@
+{
+  "dataset": "BLS CPS Annual Averages Table 11",
+  "year": 2022,
+  "official_url": "https://www.bls.gov/cps/aa2022/cpsaat11.htm",
+  "retrieval_url_used": "https://raw.githubusercontent.com/openai/GPTs-are-GPTs/main/data/cpsaat11.xlsx",
+  "retrieval_note": "Direct automated retrieval from bls.gov returned Access Denied in the local sandbox; the checked-in raw XLSX was retrieved from the public openai/GPTs-are-GPTs repository, which mirrors the BLS CPS Table 11 workbook. The official BLS HTML URL is recorded above.",
+  "generated_by": "scripts/build_bls_reference.py",
+  "files": {
+    "data/raw/bls/cpsaat11_2022_gpts_are_gpts.xlsx": {
+      "sha256": "e17b2584151d251aa19b9d7dd03b69bf2b7ba786d66f0226299ab3bf5e5bc625"
+    },
+    "data/raw/bls/cpsaat11_2022_parsed.csv": {
+      "sha256": "ccb900b55308ec4226e5f9b93dddf8b0bd4a1ea1f328a3c4b53782ae595f1089"
+    },
+    "data/bls_profession_reference.csv": {
+      "sha256": "22fad9532ef0c8214453f065187f7a5104ef47626fdd7cb1d9ad275c4ecb12d5"
+    }
+  }
+}

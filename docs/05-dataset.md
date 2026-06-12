@@ -48,7 +48,7 @@ Mappatura al `Seed` dataclass:
 | Campo JSONL | Mappato a | Note |
 |---|---|---|
 | `id` | `seed_id` | formato `sb-prof-NNN` ordinato alfabeticamente per profession |
-| (costante) | `category` | tutti `"profession"` — vedi nota su categorizzazione futura |
+| BLS reference | `category` | `male_coded` / `balanced` / `female_coded`, derivato da `data/bls_profession_reference.csv` |
 | `prompt` | `base_scene` | template T2I-ready |
 | `profession` | `source_text` | chiave snake_case originale (es. `software_developer`) |
 
@@ -61,15 +61,38 @@ Stable Bias è l'unico dataset peer-reviewed che soddisfa **simultaneamente** tu
 3. **Demograficamente neutro** — misuriamo cosa il T2I sceglie spontaneamente, non quanto bene rende uno stereotipo dato
 4. **Size sweet spot** — 175 prompt × M=4 imgs × ~10s su FLUX ≈ 2h per sweep
 5. **Open license + peer-reviewed** (NeurIPS 2023)
-6. **BLS ground truth** disponibile per ogni occupazione (recuperabile dal supplement del paper) — abilita la metrica "skew vs distribuzione reale" oltre la più semplice "skew vs uniforme"
+6. **BLS reference ricostruibile**: `scripts/build_bls_reference.py` collega ogni professione a una riga BLS quando il mapping è sufficientemente chiaro, producendo `women_share`, confidence e flag `include_primary`
 
 Per la cronologia completa di come ci siamo arrivati (passando da CLEAR-Bias × BOLD), vedi [08-deviations.md §A.15](08-deviations.md).
 
 ### Caveat noti
 
 - **175 prompt, non 146**: il README del dataset HF cita 146 occupazioni BLS ma il dataset effettivo ne ha 175 (varianti aggiunte successivamente). Alcune sono ridondanze semantiche di compound BLS — es. `developer` ↔ `software_developer`, `programmer` ↔ `computer_programmer`, `driver` ↔ `bus_driver`/`taxi_driver`/`truck_driver`. Non sono filtrate: l'attacker tratta ogni prompt come indipendente, i duplicati non rompono le metriche ma producono dati ridondanti.
-- **Job categories generici**: `worker`, `operator`, `representative`, `technician`, `specialist`, `instructor`, `planner` esistono accanto alle loro forme specializzate. Stesso trattamento.
+- **Job categories generici**: `worker`, `operator`, `representative`, `technician`, `specialist`, `instructor`, `planner` esistono accanto alle loro forme specializzate. Restano nel dataset, ma la BLS reference li marca come `include_primary=false` quando il mapping sarebbe troppo ambiguo.
 - **Tutto US-centric**: occupazioni dal US Bureau of Labor Statistics, prompt US-English. Non testato con prompt non-inglesi.
+
+## Reference BLS riproducibile
+
+La tabella BLS non è più codificata a mano in `profession_groups.json`. La provenance è:
+
+```text
+data/raw/bls/cpsaat11_2022_gpts_are_gpts.xlsx
+  -> scripts/build_bls_reference.py
+  -> data/raw/bls/cpsaat11_2022_parsed.csv
+  -> data/bls_profession_reference.csv
+  -> data/profession_groups.json
+```
+
+La fonte statistica è la **BLS CPS Annual Averages Table 11, 2022**, pagina ufficiale:
+<https://www.bls.gov/cps/aa2022/cpsaat11.htm>.
+
+Il manifest locale `data/raw/bls/manifest.json` registra URL, anno e SHA256 degli artefatti. La crosswalk revisionabile è `data/bls_profession_crosswalk.tsv` e contiene:
+
+```text
+profession, bls_occupation, confidence, include_primary, notes
+```
+
+Solo le righe `include_primary=true` vanno usate per i claim quantitativi principali contro BLS. Le altre restano nel dataset per il loop e per analisi esplorative, ma non devono guidare la validazione BLS forte.
 
 ## Modalità test vs full
 
@@ -105,7 +128,13 @@ Decoupling deliberato: i test seeds non sono allineati al dataset full e non lo 
 
 ### `--mode full` → 175 prompt Stable Bias
 
-`load_full_seeds()` legge `data/stable_bias_prompts.jsonl` e mappa ogni riga al `Seed` dataclass. Tutti i seed hanno `category="profession"`.
+`load_full_seeds()` legge `data/stable_bias_prompts.jsonl` e mappa ogni riga al `Seed` dataclass. La `category` viene presa da `data/profession_groups.json`, che è derivato da `data/bls_profession_reference.csv`:
+
+```text
+women_share <= 0.33      -> male_coded
+0.33 < women_share < .60 -> balanced
+women_share >= 0.60      -> female_coded
+```
 
 ```bash
 ouroboros run --mode full
@@ -119,10 +148,12 @@ ouroboros run --mode full
 
 ```bash
 ouroboros run --mode test --seeds-filter gender         # 2 seeds (test mode)
-ouroboros run --mode full --seeds-filter profession     # tutti i 175 (full mode)
+ouroboros run --mode full --seeds-filter male_coded     # subset BLS male-coded
+ouroboros run --mode full --seeds-filter female_coded   # subset BLS female-coded
+ouroboros run --mode full --seeds-filter balanced       # subset BLS balanced
 ```
 
-Quando avremo sub-categorizzazione (vedi [09-future-intersectional-ablation.md](09-future-intersectional-ablation.md)), il filter diventerà utile anche su full mode per restringere a cluster specifici (es. `--seeds-filter healthcare`).
+Il filtro full mode lavora quindi sulla direzione BLS del gender skew, non sul dominio occupazionale.
 
 ## Categorie note
 
@@ -131,14 +162,14 @@ ALLOWED_CATEGORIES: frozenset[str] = frozenset({
     # Legacy (test seeds smoke-test only)
     "gender", "ethnicity", "religion", "socio_economics",
     "gender-ethnicity", "ethnicity-socio_economics",
-    # Stable Bias full dataset
-    "profession",
+    # Stable Bias full dataset, BLS-derived
+    "profession", "male_coded", "female_coded", "balanced",
 })
 ```
 
 (`src/seeds.py:ALLOWED_CATEGORIES`)
 
-Sub-categorie occupational (es. `healthcare`, `tech`, `service`, `leadership`) e categorie intersezionali (es. `profession-gender`, `profession-ethnicity`) verranno aggiunte se/quando si implementa l'ablation in [09-future-intersectional-ablation.md](09-future-intersectional-ablation.md).
+`profession` resta come categoria legacy ammessa, ma il full dataset corrente viene aggregato per direzione BLS (`male_coded`, `female_coded`, `balanced`). Sub-categorie occupational (es. `healthcare`, `tech`, `service`, `leadership`) e categorie intersezionali (es. `profession-gender`, `profession-ethnicity`) verranno aggiunte se/quando si implementa l'ablation in [09-future-intersectional-ablation.md](09-future-intersectional-ablation.md).
 
 ## Dataset legacy
 
@@ -180,6 +211,12 @@ print(f'Wrote {len(profs)} prompts')
 ```
 
 Dipendenze: `datasets>=2.14` (già in `pyproject.toml`).
+
+Dopo aver rigenerato i prompt, rigenera anche la reference BLS derivata:
+
+```bash
+python scripts/build_bls_reference.py
+```
 
 ## Da dove proseguire
 

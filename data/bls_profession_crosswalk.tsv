@@ -1,0 +1,176 @@
+profession	bls_occupation	confidence	include_primary	notes
+CEO	Chief executives	high	true	Direct match to BLS detailed occupation.
+IT_specialist	Computer support specialists	medium	false	Generic IT title; closest detailed BLS row.
+accountant	Accountants and auditors	high	true	Direct/standard BLS pairing.
+administrator		low	false	Generic prompt; multiple BLS administrator rows possible.
+advisor		low	false	Generic prompt; multiple advisor occupations possible.
+aerospace_engineer	Aerospace engineers	high	true	Direct match.
+agent		low	false	Generic prompt; multiple agent occupations possible.
+aide		low	false	Generic prompt; aide is not specific enough for BLS primary analysis.
+air_conditioning_installer	Heating, air conditioning, and refrigeration mechanics and installers	high	true	Direct match.
+analyst	Management analysts	medium	false	Generic analyst title; closest broad BLS row.
+appraiser	Property appraisers and assessors	medium	true	Closest BLS detailed occupation.
+architect	Architects, except landscape and naval	high	true	Direct match.
+artist	Artists and related workers	high	true	Direct BLS aggregate for artists.
+assistant		low	false	Generic prompt; many assistant occupations possible.
+author	Writers and authors	high	true	Direct BLS pairing.
+baker	Bakers	high	true	Direct match.
+bartender	Bartenders	high	true	Direct match.
+broker	Real estate brokers and sales agents	medium	false	Generic broker title; could be real estate, financial, insurance, etc.
+bus_driver	Bus drivers, transit and intercity	medium	true	Closest BLS row; school bus driver has its own row.
+butcher	Butchers and other meat, poultry, and fish processing workers	high	true	Direct BLS pairing.
+buyer	Wholesale and retail buyers, except farm products	medium	true	Closest BLS detailed buyer row.
+career_counselor	Educational, guidance, and career counselors and advisors	high	true	Direct BLS pairing.
+carpenter	Carpenters	high	true	Direct match.
+carpet_installer	Carpet, floor, and tile installers and finishers	high	true	Direct BLS pairing.
+cashier	Cashiers	high	true	Direct match.
+childcare_worker	Childcare workers	high	true	Direct match.
+civil_engineer	Civil engineers	high	true	Direct match.
+claims_appraiser	Claims adjusters, appraisers, examiners, and investigators	high	true	Direct BLS pairing.
+cleaner	Janitors and building cleaners	medium	false	Generic cleaner prompt; could also mean maids/housekeeping or vehicle/equipment cleaners.
+clergy	Clergy	high	true	Direct match.
+clerk	Office clerks, general	medium	true	Closest BLS row for generic clerk.
+coach	Coaches and scouts	high	true	Direct BLS pairing.
+community_manager	Social and community service managers	medium	true	Closest BLS row; title is slightly broader than prompt.
+compliance_officer	Compliance officers	high	true	Direct match.
+computer_programmer	Computer programmers	high	true	Direct match.
+computer_support_specialist	Computer support specialists	high	true	Direct match.
+computer_systems_analyst	Computer systems analysts	high	true	Direct match.
+construction_worker	Construction laborers	high	true	Closest BLS row for construction worker.
+cook	Cooks	high	true	Direct match.
+correctional_officer	Correctional officers and jailers	high	true	Direct BLS pairing.
+counselor	Counselors, all other	medium	true	Generic counselor prompt; mapped to BLS residual counselor row.
+courier	Couriers and messengers	high	true	Direct BLS pairing.
+credit_counselor	Credit counselors and loan officers	high	true	Direct BLS pairing.
+customer_service_representative	Customer service representatives	high	true	Direct match.
+data_entry_keyer	Data entry keyers	high	true	Direct match.
+dental_assistant	Dental assistants	high	true	Direct match.
+dental_hygienist	Dental hygienists	high	true	Direct match.
+dentist	Dentists	high	true	Direct match.
+designer	Other designers	medium	false	Generic designer prompt; graphic/interior have separate precise rows.
+detective	Detectives and criminal investigators	high	true	Direct BLS pairing.
+developer	Software developers	medium	true	Prompt likely software developer; exact prompt is generic.
+director	Producers and directors	medium	false	Generic director prompt; BLS row is media-specific.
+dishwasher	Dishwashers	high	true	Direct match.
+dispatcher	Dispatchers, except police, fire, and ambulance	medium	true	Closest BLS row; public safety telecommunicators separate.
+doctor	Other physicians	medium	true	Closest BLS physician row; BLS table lacks a generic physician row.
+driver		low	false	Generic driver prompt; bus, taxi, truck and shuttle drivers have separate rows.
+drywall_installer	Drywall installers, ceiling tile installers, and tapers	high	true	Direct BLS pairing.
+electrical_engineer	Electrical and electronics engineers	high	true	Direct BLS pairing.
+electrician	Electricians	high	true	Direct match.
+engineer	Engineers, all other	medium	false	Generic engineer prompt; many detailed engineering rows possible.
+event_planner	Meeting, convention, and event planners	high	true	Direct BLS pairing.
+executive_assistant	Executive secretaries and executive administrative assistants	high	true	Direct BLS pairing.
+facilities_manager	Facilities managers	high	true	Direct match.
+farmer	Farmers, ranchers, and other agricultural managers	high	true	Direct BLS pairing.
+fast_food_worker	Fast food and counter workers	high	true	Direct BLS pairing.
+file_clerk	File Clerks	high	true	Direct match in BLS capitalization.
+financial_advisor	Personal financial advisors	high	true	Direct BLS pairing.
+financial_analyst	Financial and investment analysts	high	true	Direct BLS pairing.
+financial_manager	Financial managers	high	true	Direct match.
+firefighter	Firefighters	high	true	Direct match.
+fitness_instructor	Exercise trainers and group fitness instructors	high	true	Direct BLS pairing.
+graphic_designer	Graphic designers	high	true	Direct match.
+groundskeeper	Landscaping and groundskeeping workers	high	true	Direct BLS pairing.
+guard	Security guards and gambling surveillance officers	medium	true	Closest BLS row for generic guard.
+hairdresser	Hairdressers, hairstylists, and cosmetologists	high	true	Direct BLS pairing.
+head_cook	Chefs and head cooks	high	true	Direct BLS pairing.
+health_technician	Miscellaneous health technologists and technicians	medium	false	Generic health technician prompt; many detailed health technician rows possible.
+host	Hosts and hostesses, restaurant, lounge, and coffee shop	high	true	Direct BLS pairing.
+hostess	Hosts and hostesses, restaurant, lounge, and coffee shop	high	true	Direct BLS pairing.
+hygienist	Dental hygienists	medium	true	Prompt omits dental qualifier but Stable Bias title likely means dental hygienist.
+industrial_engineer	Industrial engineers, including health and safety	high	true	Direct BLS pairing.
+installer		low	false	Generic installer prompt; many installation occupations possible.
+instructor	Other teachers and instructors	medium	false	Generic instructor prompt.
+insurance_agent	Insurance sales agents	high	true	Direct BLS pairing.
+interior_designer	Interior designers	high	true	Direct match.
+interviewer	Interviewers, except eligibility and loan	high	true	Direct BLS pairing.
+inventory_clerk	Shipping, receiving, and inventory clerks	high	true	Direct BLS pairing.
+jailer	Correctional officers and jailers	high	true	Direct BLS pairing.
+janitor	Janitors and building cleaners	high	true	Direct BLS pairing.
+keyer	Data entry keyers	medium	true	Prompt shorthand for data entry keyer.
+laboratory_technician	Clinical laboratory technologists and technicians	high	true	Direct BLS pairing.
+language_pathologist	Speech-language pathologists	high	true	Direct BLS pairing.
+lawyer	Lawyers	high	true	Direct match.
+librarian	Librarians and media collections specialists	high	true	Direct BLS pairing.
+logistician	Logisticians	high	true	Direct match.
+machinery_mechanic	Industrial and refractory machinery mechanics	medium	true	Closest BLS row for machinery mechanic.
+machinist	Machinists	high	true	Direct match.
+maid	Maids and housekeeping cleaners	high	true	Direct BLS pairing.
+manager	Managers, all other	medium	false	Generic manager prompt; many detailed manager rows possible.
+manicurist	Manicurists and pedicurists	high	true	Direct BLS pairing.
+market_research_analyst	Market research analysts and marketing specialists	high	true	Direct BLS pairing.
+marketing_manager	Marketing managers	high	true	Direct match.
+massage_therapist	Massage therapists	high	true	Direct match.
+mechanic	Automotive service technicians and mechanics	medium	true	Generic mechanic prompt; automotive mechanic is the closest common BLS row.
+mechanical_engineer	Mechanical engineers	high	true	Direct match.
+medical_records_specialist	Medical records specialists	high	true	Direct match.
+mental_health_counselor	Mental health counselors	high	true	Direct match.
+metal_worker	Other metal workers and plastic workers	medium	true	Closest BLS residual metal-worker row.
+mover	Laborers and freight, stock, and material movers, hand	high	true	Direct BLS pairing.
+musician	Musicians and singers	high	true	Direct BLS pairing.
+network_administrator	Network and computer systems administrators	high	true	Direct BLS pairing.
+nurse	Registered nurses	high	true	Direct match.
+nursing_assistant	Nursing assistants	high	true	Direct match.
+nutritionist	Dietitians and nutritionists	high	true	Direct BLS pairing.
+occupational_therapist	Occupational therapists	high	true	Direct match.
+office_clerk	Office clerks, general	high	true	Direct BLS pairing.
+office_worker	Office and administrative support workers, all other	medium	false	Generic office worker prompt.
+officer		low	false	Generic officer prompt; police, correctional, compliance and probation rows differ.
+operator		low	false	Generic operator prompt; many BLS operator rows possible.
+painter	Painters and paperhangers	medium	true	Closest BLS row for occupational painter; prompt could also mean artist.
+paralegal	Paralegals and legal assistants	high	true	Direct BLS pairing.
+pathologist		low	false	Ambiguous; BLS row in table is speech-language pathologists, not generic pathologist.
+payroll_clerk	Payroll and timekeeping clerks	high	true	Direct BLS pairing.
+pharmacist	Pharmacists	high	true	Direct match.
+pharmacy_technician	Pharmacy technicians	high	true	Direct match.
+photographer	Photographers	high	true	Direct match.
+physical_therapist	Physical therapists	high	true	Direct match.
+pilot	Aircraft pilots and flight engineers	high	true	Direct BLS pairing.
+plane_mechanic	Aircraft mechanics and service technicians	high	true	Direct BLS pairing.
+planner	Meeting, convention, and event planners	medium	false	Generic planner prompt; event planner is one plausible row.
+plumber	Plumbers, pipefitters, and steamfitters	high	true	Direct BLS pairing.
+police_officer	Police officers	high	true	Direct match.
+postal_worker	Postal service mail carriers	medium	false	Generic postal worker prompt; clerks, carriers and sorters are separate.
+printing_press_operator	Printing press operators	high	true	Direct match.
+producer	Producers and directors	high	true	Direct BLS pairing.
+programmer	Computer programmers	high	true	Direct match.
+psychologist	Other psychologists	medium	true	Closest BLS row available in Table 11.
+public_relations_specialist	Public relations specialists	high	true	Direct match.
+purchasing_agent	Purchasing agents, except wholesale, retail, and farm products	high	true	Direct BLS pairing.
+radiologic_technician	Radiologic technologists and technicians	high	true	Direct BLS pairing.
+real_estate_broker	Real estate brokers and sales agents	high	true	Direct BLS pairing.
+receptionist	Receptionists and information clerks	high	true	Direct BLS pairing.
+repair_worker	Maintenance and repair workers, general	medium	true	Closest BLS row for generic repair worker.
+representative		low	false	Generic representative prompt; multiple sales/service representative rows possible.
+roofer	Roofers	high	true	Direct match.
+sales_manager	Sales managers	high	true	Direct match.
+salesperson	Retail salespersons	medium	true	Closest BLS row for generic salesperson.
+school_bus_driver	Bus drivers, school	high	true	Direct match.
+scientist	Life, physical, and social science occupations	medium	false	Generic scientist prompt; many detailed science rows possible.
+security_guard	Security guards and gambling surveillance officers	high	true	Direct BLS pairing.
+sheet_metal_worker	Sheet metal workers	high	true	Direct match.
+singer	Musicians and singers	medium	true	Combined BLS row; closest available row for singer.
+social_assistant	Social and human service assistants	high	true	Direct BLS pairing.
+social_worker	Social workers, all other	medium	true	Closest generic social worker row; detailed child/family/healthcare rows also exist.
+software_developer	Software developers	high	true	Direct match.
+specialist		low	false	Generic specialist prompt; many BLS specialist rows possible.
+stocker	Stockers and order fillers	high	true	Direct BLS pairing.
+supervisor		low	false	Generic supervisor prompt; many first-line supervisor rows possible.
+taxi_driver	Taxi drivers	high	true	Direct match.
+teacher	Elementary and middle school teachers	medium	false	Generic teacher prompt; many detailed teacher rows possible.
+teaching_assistant	Teaching assistants	high	true	Direct match.
+technician		low	false	Generic technician prompt; many BLS technician rows possible.
+teller	Tellers	high	true	Direct match.
+therapist	Therapists, all other	medium	true	Generic therapist prompt; closest BLS residual row.
+tractor_operator	Industrial truck and tractor operators	high	true	Direct BLS pairing.
+truck_driver	Driver/sales workers and truck drivers	high	true	Direct BLS pairing.
+tutor	Tutors	high	true	Direct match.
+underwriter	Insurance underwriters	high	true	Direct match.
+veterinarian	Veterinarians	high	true	Direct match.
+waiter	Waiters and waitresses	high	true	Direct BLS pairing.
+waitress	Waiters and waitresses	high	true	Direct BLS pairing.
+welder	Welding, soldering, and brazing workers	high	true	Direct BLS pairing.
+wholesale_buyer	Wholesale and retail buyers, except farm products	high	true	Direct BLS pairing.
+worker		low	false	Generic worker prompt; not suitable for BLS mapping.
+writer	Writers and authors	high	true	Direct BLS pairing.

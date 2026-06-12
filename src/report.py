@@ -18,9 +18,14 @@ from ouroboros.metrics import (
     load_run,
     per_axis_summary,
     per_category,
+    stereotype_elicitation_summary,
     summary_per_seed,
 )
-from ouroboros.metrics.fairness import distribution_gap_summary
+from ouroboros.metrics.agreement import (
+    judge_fairface_axis_spearman,
+    judge_fairface_gender_agreement,
+)
+from ouroboros.metrics.fairness import bls_gender_alignment_summary, distribution_gap_summary
 
 logger = logging.getLogger(__name__)
 
@@ -198,11 +203,15 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
     cat_df = per_category(run_df)
     axis_df = per_axis_summary(run_df) if not run_df.empty else None
     bvi = baseline_vs_iterative(baseline_df, run_df)
+    stereotype_df = stereotype_elicitation_summary(baseline_df, run_df)
     asr_iter_df = asr_vs_iter(run_df) if not run_df.empty else None
     variance_df = intra_batch_variance(run_df) if not run_df.empty else None
 
     fairface_df = None
     distribution_gap_df = None
+    bls_alignment_df = None
+    agreement_spearman_df = None
+    agreement_gender_df = None
     if not skip_fairface and not run_df.empty:
         fairface_df = _run_fairface_pipeline(run_dir, run_df)
         if fairface_df is not None and not fairface_df.empty:
@@ -210,6 +219,36 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
             if not distribution_gap_df.empty:
                 distribution_gap_df.to_csv(report_dir / "distribution_gap.csv", index=False)
                 logger.info("  distribution_gap.csv             → %d rows", len(distribution_gap_df))
+            fairface_raw_df = None
+            try:
+                from ouroboros.fairface import load_fairface
+
+                fairface_raw_df = load_fairface(run_dir)
+            except Exception as exc:
+                logger.warning("Loading fairface.jsonl failed: %s — skipping derived metrics", exc)
+            if fairface_raw_df is not None and not fairface_raw_df.empty:
+                try:
+                    bls_alignment_df = bls_gender_alignment_summary(fairface_raw_df)
+                    if not bls_alignment_df.empty:
+                        bls_alignment_df.to_csv(report_dir / "bls_gender_alignment.csv", index=False)
+                        logger.info("  bls_gender_alignment.csv        → %d rows", len(bls_alignment_df))
+                except Exception as exc:
+                    logger.warning("BLS gender alignment failed: %s — skipping", exc)
+                try:
+                    agreement_spearman_df = judge_fairface_axis_spearman(run_df, fairface_raw_df)
+                    if not agreement_spearman_df.empty:
+                        agreement_spearman_df.to_csv(
+                            report_dir / "judge_fairface_spearman.csv", index=False
+                        )
+                        logger.info("  judge_fairface_spearman.csv     → %d rows", len(agreement_spearman_df))
+                    agreement_gender_df = judge_fairface_gender_agreement(run_df, fairface_raw_df)
+                    if not agreement_gender_df.empty:
+                        agreement_gender_df.to_csv(
+                            report_dir / "judge_fairface_gender_agreement.csv", index=False
+                        )
+                        logger.info("  judge_fairface_gender_agreement.csv → %d rows", len(agreement_gender_df))
+                except Exception as exc:
+                    logger.warning("Judge-FairFace agreement failed: %s — skipping", exc)
 
     clusters_data: list[dict] = []
     if not run_df.empty and "strategy_label" in run_df.columns:
@@ -230,6 +269,8 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         cat_df.to_csv(report_dir / "per_category.csv", index=False)
     if axis_df is not None and not axis_df.empty:
         axis_df.to_csv(report_dir / "per_axis.csv", index=False)
+    if not stereotype_df.empty:
+        stereotype_df.to_csv(report_dir / "stereotype_elicitation.csv", index=False)
     if asr_iter_df is not None and not asr_iter_df.empty:
         asr_iter_df.to_csv(report_dir / "asr_vs_iter.csv", index=False)
     if variance_df is not None and not variance_df.empty:
@@ -277,6 +318,7 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         summary=summary_df.to_dict("records") if not summary_df.empty else [],
         per_category_rows=cat_df.to_dict("records") if not cat_df.empty else [],
         baseline_vs_iter=bvi,
+        stereotype_rows=stereotype_df.to_dict("records") if not stereotype_df.empty else [],
         clusters=clusters_data,
         thumbs_by_category=thumbs_by_category,
         asr_chart_svg=asr_chart_svg,
@@ -285,6 +327,21 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         distribution_gap_rows=(
             distribution_gap_df.to_dict("records")
             if distribution_gap_df is not None and not distribution_gap_df.empty
+            else []
+        ),
+        bls_alignment_rows=(
+            bls_alignment_df.to_dict("records")
+            if bls_alignment_df is not None and not bls_alignment_df.empty
+            else []
+        ),
+        agreement_spearman_rows=(
+            agreement_spearman_df.to_dict("records")
+            if agreement_spearman_df is not None and not agreement_spearman_df.empty
+            else []
+        ),
+        agreement_gender_rows=(
+            agreement_gender_df.to_dict("records")
+            if agreement_gender_df is not None and not agreement_gender_df.empty
             else []
         ),
         axis_names=axis_names,
@@ -296,12 +353,16 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
     logger.info("  summary.csv                    → %d rows", len(summary_df) if not summary_df.empty else 0)
     logger.info("  per_category.csv               → %d rows", len(cat_df) if not cat_df.empty else 0)
     logger.info("  per_axis.csv                   → %d rows", len(axis_df) if axis_df is not None and not axis_df.empty else 0)
+    if not stereotype_df.empty:
+        logger.info("  stereotype_elicitation.csv     → %d rows", len(stereotype_df))
     logger.info("  asr_vs_iter.csv                → %d rows", len(asr_iter_df) if asr_iter_df is not None else 0)
     logger.info("  intra_batch_variance.csv       → %d rows", len(variance_df) if variance_df is not None else 0)
     if fairface_df is not None and not fairface_df.empty:
         logger.info("  fairface_per_category.csv      → %d rows", len(fairface_df))
     if distribution_gap_df is not None and not distribution_gap_df.empty:
         logger.info("  distribution_gap.csv           → %d rows", len(distribution_gap_df))
+    if bls_alignment_df is not None and not bls_alignment_df.empty:
+        logger.info("  bls_gender_alignment.csv       → %d rows", len(bls_alignment_df))
     logger.info("  strategy_clusters              → %d clusters", len(clusters_data))
     logger.info("  report.html                    → self-contained")
 
@@ -351,12 +412,16 @@ def _render_html(
     summary: list[dict],
     per_category_rows: list[dict],
     baseline_vs_iter: dict,
+    stereotype_rows: list[dict],
     clusters: list[dict],
     thumbs_by_category: dict[str, list[str]],
     asr_chart_svg: str,
     variance_rows: list[dict],
     fairface_rows: list[dict],
     distribution_gap_rows: list[dict],
+    bls_alignment_rows: list[dict],
+    agreement_spearman_rows: list[dict],
+    agreement_gender_rows: list[dict],
     axis_names: list[str],
     axis_rows: list[dict],
 ) -> str:
@@ -371,6 +436,7 @@ def _render_html(
         summary=summary,
         per_category=per_category_rows,
         baseline_vs_iter=baseline_vs_iter if baseline_vs_iter else None,
+        stereotype_rows=stereotype_rows,
         clusters=clusters,
         thumbs_by_category=thumbs_by_category,
         version=__version__,
@@ -379,6 +445,9 @@ def _render_html(
         variance_rows=variance_rows,
         fairface_rows=fairface_rows,
         distribution_gap_rows=distribution_gap_rows,
+        bls_alignment_rows=bls_alignment_rows,
+        agreement_spearman_rows=agreement_spearman_rows,
+        agreement_gender_rows=agreement_gender_rows,
         axis_names=axis_names,
         axis_rows=axis_rows,
     )
