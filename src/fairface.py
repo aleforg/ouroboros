@@ -386,25 +386,56 @@ def classify(face_pil: Any, weights_path: Path | None = None) -> dict[str, str]:
     }
 
 
-def _load_image_index(run_dir: Path) -> dict[str, dict]:
-    """Build image_path → (seed_id, category, iter, sample_idx) map from run.jsonl.
+def _record_has_image(record: dict) -> bool:
+    """True if a run/baseline record has at least one generated image."""
+    return any(
+        isinstance(s, dict) and s.get("path")
+        for s in (record.get("samples") or [])
+    )
 
-    Only considers the iterative loop's run.jsonl. baseline.jsonl is ignored:
-    baseline images live under their own images/<seed>/baseline/ namespace
-    (see storage.save_image), so there is no longer a path collision with the
-    loop's iter_00 — they are simply out of scope for the FairFace pipeline.
+
+def _load_image_index(
+    run_dir: Path, selection: str = "iterative_all"
+) -> dict[str, dict]:
+    """Build image_path → (seed_id, category, iter, sample_idx) map.
+
+    ``selection`` chooses which batch(es) feed the FairFace pipeline:
+
+    - ``"iterative_all"`` (default): every image in run.jsonl, all iterations.
+      Maximises per-image coverage — used for convergent-validity metrics
+      (judge↔FairFace agreement, BLS alignment).
+    - ``"iterative_terminal"``: only the terminal iteration per seed, i.e. the
+      last iteration that produced images. On a successful seed this is the
+      success batch, since the loop stops there — giving a single M-image batch
+      per seed, symmetric with the baseline.
+    - ``"baseline"``: images from baseline.jsonl (one M-image batch per seed,
+      under images/<seed>/baseline/).
+
+    Both ``iterative_*`` read run.jsonl; ``baseline`` reads baseline.jsonl.
     """
     import json
 
-    run_jsonl = run_dir / "run.jsonl"
-    if not run_jsonl.exists():
-        raise FileNotFoundError(f"No run.jsonl in {run_dir}")
+    source = run_dir / ("baseline.jsonl" if selection == "baseline" else "run.jsonl")
+    if not source.exists():
+        raise FileNotFoundError(f"No {source.name} in {run_dir}")
+
+    records: list[dict] = []
+    for line in source.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            records.append(json.loads(line))
+
+    if selection == "iterative_terminal":
+        terminal: dict[str, dict] = {}
+        for r in records:
+            if not _record_has_image(r):
+                continue
+            prev = terminal.get(r["seed_id"])
+            if prev is None or r["iter"] >= prev["iter"]:
+                terminal[r["seed_id"]] = r
+        records = list(terminal.values())
 
     index: dict[str, dict] = {}
-    for line in run_jsonl.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        r = json.loads(line)
+    for r in records:
         meta_base = {
             "seed_id": r["seed_id"],
             "category": r["category"],
@@ -423,10 +454,14 @@ def process_run(
     min_size: int = 60,
     min_conf: float = 0.9,
     show_progress: bool = True,
+    selection: str = "iterative_all",
 ) -> int:
     """Walk run_dir/images/, classify every face, append to output_jsonl.
 
-    Returns the number of face rows written. Overwrites output_jsonl.
+    ``selection`` (see :func:`_load_image_index`) picks which batch(es) to
+    classify: all iterations (default), the iterative terminal batch per seed,
+    or the baseline batch. Returns the number of face rows written. Overwrites
+    output_jsonl.
     """
     import json
 
@@ -436,7 +471,7 @@ def process_run(
     else:
         output_jsonl = Path(output_jsonl)
 
-    image_index = _load_image_index(run_dir)
+    image_index = _load_image_index(run_dir, selection=selection)
     if not image_index:
         logger.warning("No image paths found in %s/run.jsonl", run_dir)
         output_jsonl.write_text("")
@@ -499,11 +534,15 @@ def process_run(
     return n_faces
 
 
-def load_fairface(run_dir: Path) -> pd.DataFrame:
-    """Load fairface.jsonl into a DataFrame. Returns empty if missing."""
+def load_fairface(run_dir: Path, filename: str = "fairface.jsonl") -> pd.DataFrame:
+    """Load a FairFace JSONL (default fairface.jsonl) into a DataFrame.
+
+    ``filename`` selects which artifact to read — e.g. ``fairface_baseline.jsonl``
+    or ``fairface_iterative_terminal.jsonl``. Returns empty if missing.
+    """
     import json
 
-    path = Path(run_dir) / "fairface.jsonl"
+    path = Path(run_dir) / filename
     if not path.exists():
         return pd.DataFrame()
     rows = []

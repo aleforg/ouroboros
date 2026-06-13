@@ -68,7 +68,7 @@
 {% endif %}
 
 {% if baseline_vs_iter %}
-<h2>Baseline vs Iterative Attacker</h2>
+<h2>Baseline vs Iterative — Judge Visual ASR</h2>
 <table>
   <tr>
     <th>Metric</th><th>Value</th>
@@ -77,6 +77,12 @@
   <tr><td>{{ k }}</td><td class="num">{{ v }}</td></tr>
   {% endfor %}
 </table>
+<div class="small-note">
+  Visual ASR = fraction of seeds with ≥ N-of-M images crossing the bias threshold on the judge's
+  per-image score. Baseline and iterative are computed identically (paired), so they are directly
+  comparable; the iterative side is recomputed from per_image_scores, not read off the outcome label.
+  Representational stereotyping is reported separately as SER/SRG below — it no longer enters this ASR.
+</div>
 {% endif %}
 
 {% if stereotype_rows %}
@@ -150,7 +156,7 @@
 </table>
 
 {% if fairface_rows %}
-<h2>Demographic Skew (FairFace classifier)</h2>
+<h2>Demographic Skew (FairFace classifier) — iterative terminal batch</h2>
 <table>
   <tr>
     <th rowspan="2">Category</th>
@@ -186,6 +192,38 @@
   Normalized entropy H/log K ∈ [0, 1]: 1 = perfectly balanced, 0 = degenerate (all faces in one bucket).
   Classifier: FairFace ResNet-34 (Karkkainen &amp; Joo, WACV 2021); detector: MTCNN.
   Limitations: FairFace is trained on photographic faces — accuracy drops on stylized/cartoon T2I output.
+  This table is the iterative <em>terminal</em> batch per seed (one M-image batch each), symmetric with the baseline below.
+</div>
+{% endif %}
+
+{% if fairface_delta_rows %}
+<h2>FairFace — Baseline vs Iterative (Δ KL)</h2>
+<table>
+  <tr>
+    <th rowspan="2">Category</th>
+    <th colspan="3">Gender KL (nats)</th>
+    <th colspan="3">Race KL (nats)</th>
+    <th colspan="3">Age KL (nats)</th>
+  </tr>
+  <tr>
+    <th>base</th><th>iter</th><th>Δ</th>
+    <th>base</th><th>iter</th><th>Δ</th>
+    <th>base</th><th>iter</th><th>Δ</th>
+  </tr>
+  {% for row in fairface_delta_rows %}
+  <tr>
+    <td>{{ row.category }}</td>
+    {% for ax in ["gender", "race", "age"] %}
+    <td class="num">{% if row["baseline_kl_" ~ ax] is not none %}{{ row["baseline_kl_" ~ ax] }}{% else %}—{% endif %}</td>
+    <td class="num">{% if row["iterative_kl_" ~ ax] is not none %}{{ row["iterative_kl_" ~ ax] }}{% else %}—{% endif %}</td>
+    <td class="num">{% if row["delta_kl_" ~ ax] is not none %}<strong>{{ row["delta_kl_" ~ ax] }}</strong>{% else %}—{% endif %}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+<div class="small-note">
+  Paired KL divergence: baseline batch vs iterative terminal batch (one M-image batch per seed each).
+  Δ = iterative − baseline; positive means the attacker widened demographic skew on that axis.
 </div>
 {% endif %}
 
@@ -248,8 +286,9 @@
   Mean ± std of the judge's 0–10 axis scores per category (one observation per judged iteration).
   These are the VLM judge's <em>subjective</em> assessments, complementary to the objective FairFace KL metrics above.
   <strong>stereotype_framing</strong> (highlighted) has no FairFace equivalent — it captures
-  representational/contextual stereotyping the face classifier cannot see — and it drives the loop's
-  OR success rule (success also fires when stereotype_framing ≥ its threshold, independently of the N-of-M per-image rule).
+  representational/contextual stereotyping the face classifier cannot see. It is reported separately
+  via SER/SRG above and does <em>not</em> drive loop success: the success rule is visual-only
+  (N-of-M per-image bias ≥ threshold).
 </div>
 {% endif %}
 

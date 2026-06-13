@@ -403,3 +403,100 @@ def test_process_run_no_images_in_jsonl(tmp_path):
 def test_load_fairface_missing_file_returns_empty(tmp_path):
     df = load_fairface(tmp_path)
     assert df.empty
+
+
+def test_load_fairface_custom_filename(tmp_path):
+    (tmp_path / "fairface_baseline.jsonl").write_text(
+        json.dumps({"category": "gender", "image_path": "a.png", "gender": "Male"}) + "\n"
+    )
+    assert load_fairface(tmp_path).empty  # default fairface.jsonl missing
+    df = load_fairface(tmp_path, "fairface_baseline.jsonl")
+    assert len(df) == 1
+
+
+# --- _load_image_index selection modes ----------------------------------------
+
+
+def _write_baseline_jsonl(run_dir: Path, records: list[dict]) -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with (run_dir / "baseline.jsonl").open("w") as fh:
+        for r in records:
+            fh.write(json.dumps(r) + "\n")
+
+
+def test_load_image_index_iterative_all_keeps_every_iteration(tmp_path):
+    _write_run_jsonl(tmp_path, [
+        {"seed_id": "s", "category": "gender", "iter": 0,
+         "samples": [{"path": "i0.png", "outcome": "image"}]},
+        {"seed_id": "s", "category": "gender", "iter": 1,
+         "samples": [{"path": "i1.png", "outcome": "image"}]},
+    ])
+    idx = _load_image_index(tmp_path, selection="iterative_all")
+    assert set(idx) == {"i0.png", "i1.png"}
+
+
+def test_load_image_index_iterative_terminal_keeps_last_iter_with_images(tmp_path):
+    _write_run_jsonl(tmp_path, [
+        {"seed_id": "s1", "category": "gender", "iter": 0,
+         "samples": [{"path": "s1_i0.png", "outcome": "image"}]},
+        {"seed_id": "s1", "category": "gender", "iter": 1,
+         "samples": [{"path": "s1_i1.png", "outcome": "image"}]},
+        # iter 2 has no image (e.g. judge_error / refusal) → terminal stays iter 1
+        {"seed_id": "s1", "category": "gender", "iter": 2,
+         "samples": [{"path": None, "outcome": "error"}]},
+        {"seed_id": "s2", "category": "gender", "iter": 0,
+         "samples": [{"path": "s2_i0.png", "outcome": "image"}]},
+    ])
+    idx = _load_image_index(tmp_path, selection="iterative_terminal")
+    # One terminal batch per seed: s1's iter 1, s2's iter 0.
+    assert set(idx) == {"s1_i1.png", "s2_i0.png"}
+    assert idx["s1_i1.png"]["iter"] == 1
+
+
+def test_load_image_index_baseline_reads_baseline_jsonl(tmp_path):
+    # run.jsonl present but baseline selection must read baseline.jsonl instead.
+    _write_run_jsonl(tmp_path, [
+        {"seed_id": "s", "category": "gender", "iter": 0,
+         "samples": [{"path": "iter_img.png", "outcome": "image"}]},
+    ])
+    _write_baseline_jsonl(tmp_path, [
+        {"seed_id": "s", "category": "gender", "iter": 0,
+         "samples": [{"path": "images/s/baseline/sample_0.png", "outcome": "image"}]},
+    ])
+    idx = _load_image_index(tmp_path, selection="baseline")
+    assert set(idx) == {"images/s/baseline/sample_0.png"}
+
+
+def test_load_image_index_baseline_missing_file_raises(tmp_path):
+    _write_run_jsonl(tmp_path, [{"seed_id": "s", "category": "gender", "iter": 0, "samples": []}])
+    with pytest.raises(FileNotFoundError):
+        _load_image_index(tmp_path, selection="baseline")
+
+
+def test_process_run_terminal_selection_classifies_only_terminal_batch(fake_run):
+    # Add a second iteration with its own image; terminal selection should only
+    # classify iter 1's image, not iter 0's two images.
+    img_dir1 = fake_run / "images" / "gender_001" / "iter_01"
+    img_dir1.mkdir(parents=True)
+    (img_dir1 / "sample_0.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    # Rewrite run.jsonl with two iterations.
+    _write_run_jsonl(fake_run, [
+        {"seed_id": "gender_001", "category": "gender", "iter": 0, "samples": [
+            {"path": "images/gender_001/iter_00/sample_0.png", "outcome": "image"},
+            {"path": "images/gender_001/iter_00/sample_1.png", "outcome": "image"},
+        ]},
+        {"seed_id": "gender_001", "category": "gender", "iter": 1, "samples": [
+            {"path": "images/gender_001/iter_01/sample_0.png", "outcome": "image"},
+        ]},
+    ])
+    fake_face = DetectedFace(bbox=(0, 0, 100, 100), confidence=0.97, face_pil=object())
+    with patch.object(ff, "_load_models"), \
+         patch.object(ff, "detect_faces", return_value=[fake_face]) as m_det, \
+         patch.object(ff, "classify", return_value={"gender": "Male", "race": "White", "age_bucket": "30-39"}):
+        n = process_run(fake_run, output_jsonl=fake_run / "fairface_iterative_terminal.jsonl",
+                        selection="iterative_terminal", show_progress=False)
+
+    assert n == 1  # only the terminal (iter 1) image
+    assert m_det.call_count == 1
+    df = load_fairface(fake_run, "fairface_iterative_terminal.jsonl")
+    assert df["image_path"].tolist() == ["images/gender_001/iter_01/sample_0.png"]

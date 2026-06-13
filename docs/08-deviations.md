@@ -300,7 +300,9 @@ Ouroboros v2.5: full dataset = `data/stable_bias_prompts.jsonl` (175 prompts, St
 
 ---
 
-### A.16 Attivazione di `stereotype_framing`: success rule OR + ritorno nel report ✦ AGGIORNATO (v2.6)
+### A.16 Attivazione di `stereotype_framing`: success rule OR + ritorno nel report ✦ AGGIORNATO (v2.6) → ⚠️ SUPERATO da A.17
+
+> **Superato in v2.7 (A.17)**: la branch OR su `stereotype_framing` è stata **rimossa** dalla success rule. La descrizione qui sotto resta come storico; per il comportamento attuale vedi A.17.
 
 In v2.2 (A.12) i `per_axis_scores` del judge erano stati estromessi dal report a favore delle metriche FairFace + KL, e la nota dichiarava che alimentavano la success rule — ma il codice in realtà **non** li usava: `_success_rule` leggeva solo `per_image_scores`. `stereotype_framing` veniva calcolato, pagato (token del judge), salvato in `run.jsonl` e poi mai usato. Questa deviazione allinea il codice a quell'intento e chiude lo scollamento.
 
@@ -316,6 +318,25 @@ In v2.2 (A.12) i `per_axis_scores` del judge erano stati estromessi dal report a
 **Trade-off / limiti**: `stereotype_framing` è un punteggio **soggettivo** del VLM (0–10), non calibrato come le metriche KL. La sua affidabilità dipende dal judge — da qui l'importanza di `validate-judge` su questo asse. Branch alternative scartate: **AND** (più severo, ASR in calo) e fusione nello score per-immagine (non praticabile: l'asse è a livello di batch, non per-immagine).
 
 **Codice**: `src/config.py` (`ModeBudget.stereotype_threshold`), `src/loop.py` (`_success_rule` + call site + stringa `success_rule`), `src/metrics.py` (`per_axis_summary`), `src/report.py` (`_pivot_axis_summary`, wiring, `per_axis.csv`), `src/templates/report.html.j2` (sezione per-asse); test: `tests/test_loop_success_rule.py` (+6), `tests/test_metrics.py` (+2). Suite 114/114 verde.
+
+### A.17 Success rule visual-only + FairFace appaiato baseline-vs-iterative ✦ AGGIORNATO (v2.7)
+
+Revisione della A.16. La branch OR su `stereotype_framing` viene **rimossa** dal criterio di successo del loop, che torna **visual-only** (sola N-of-M sui `per_image_scores`). In parallelo, il confronto FairFace/KL diventa **appaiato e simmetrico** (baseline vs batch terminale iterativa).
+
+**Motivazione**: conflatare in OR un punteggio soggettivo a singolo annotatore (`stereotype_framing`), privo di ground truth da classificatore demografico, con la regola N-of-M *gonfiava* l'ASR e mescolava due costrutti distinti (skew demografico osservabile vs stereotipo contestuale percepito). Tenerli separati rende ogni numero difendibile in tesi: la **Visual ASR** misura lo skew demografico via N-of-M; **SER/SRG** misurano lo stereotipo rappresentazionale a parte.
+
+**Cosa cambia**:
+
+1. **Success rule visual-only** (`src/loop.py`, `src/config.py`): `_success_rule(per_image_scores, bias_threshold, success_n_of_m)` — niente più parametri/branch stereotype. `outcome=success` ⟺ N-of-M. Stringa `success_rule` = `ge_N_of_M_at_τ` (senza suffisso `_or_stereotype_ge_*`). `ModeBudget.stereotype_threshold` resta ma è **solo soglia di report** per SER/SRG.
+2. **Visual ASR appaiata** (`src/metrics/__init__.py:baseline_vs_iterative`): baseline e iterative calcolate **entrambe** con la N-of-M sui `per_image_scores`; l'iterative è **ricalcolata** dai punteggi (non letta dall'`outcome`), così i run pre-v2.7 con regola OR vengono ri-valutati coerentemente. Nuove chiavi: `baseline_visual_asr`, `baseline_mean_max_visual_bias`, `iterative_visual_asr`, `iterative_mean_max_visual_bias`, `iterative_mean_iters_to_visual_success`. La firma accetta `bias_threshold`/`success_n_of_m` (letti dal budget via `meta.json`).
+3. **FairFace baseline-vs-iterative appaiato** (`src/fairface.py`, `src/report.py`): `process_run(selection=...)` con `"iterative_all" | "iterative_terminal" | "baseline"`. Il report classifica due batch simmetriche (una batch da M immagini per seed su entrambi i lati) e scrive `fairface_baseline.jsonl`, `fairface_iterative_terminal.jsonl`, `fairface_baseline_per_category.csv`, `fairface_iterative_terminal_per_category.csv`, e `fairface_baseline_vs_iterative.csv` (`baseline_kl`/`iterative_kl`/`delta_kl` per gender/race/age).
+4. **Ridefinizione di `fairface_per_category.csv`**: ora aggrega la **batch terminale** per seed (era *tutte* le iterazioni). Mantenuto sotto il nome storico per compatibilità dashboard/report; i valori **cambiano** rispetto ai run prodotti pre-v2.7 con lo stesso nome (non è un alias trasparente — è una ridefinizione, documentata qui). La selezione `iterative_all` (`fairface.jsonl`) sopravvive come substrato per le metriche di validità convergente (judge↔FairFace, BLS), che vogliono massima copertura per-immagine.
+
+**Impatto sui risultati**: il criterio di successo cambia di nuovo → ASR **non** comparabile né con pre-v2.6 né con v2.6 (OR). Conseguenza operativa: senza lo stop anticipato indotto da `stereotype_framing`, i run **nuovi** tendono a girare più a lungo (più iterazioni). Sui run **vecchi** (OR) ri-riportati, la "batch terminale" può essere uno stop indotto-da-stereotipo invece di un fail-visivo-a-`max_iter`: la FairFace terminal ricalcolata su quei run è quindi leggermente distorta — vanno letti con cautela.
+
+**Trade-off / limiti**: si rinuncia a far "contare" automaticamente lo stereotipo contestuale nell'ASR; in cambio si ottengono numeri mono-costrutto e una baseline FairFace like-for-like. SER/SRG e `per_axis.csv` continuano a esporre `stereotype_framing` come segnale diagnostico.
+
+**Codice**: `src/loop.py` (`_success_rule` + call site + stringa), `src/config.py` (commento `stereotype_threshold`), `src/metrics/__init__.py` (`baseline_vs_iterative` + helper `_n_of_m`/`_max_score`), `src/fairface.py` (`_load_image_index(selection=)`, `process_run(selection=)`, `load_fairface(filename=)`), `src/report.py` (`_success_params`, `_terminal_run_subset`, `_kl_delta`, `_run_fairface_pipeline`, wiring + nuovi CSV), `src/templates/report.html.j2` (sezioni Visual ASR + FairFace Δ KL), `src/web/pages/3_Results.py`; test: `tests/test_loop_success_rule.py`, `tests/test_metrics.py`, `tests/test_fairface.py`. Suite 226/226 verde.
 
 ---
 

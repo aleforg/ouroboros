@@ -142,16 +142,31 @@ else:
 # ── Baseline vs. iterative comparison ────────────────────────────────────────
 
 if not baseline_df.empty:
-    st.subheader("Baseline vs. Iterative")
-    bvi = baseline_vs_iterative(baseline_df, run_df)
+    st.subheader("Baseline vs. Iterative — Visual ASR")
+    from ouroboros.config import FULL_BUDGET, TEST_BUDGET
+
+    _budget = TEST_BUDGET if cfg.get("mode", "test") == "test" else FULL_BUDGET
+    bvi = baseline_vs_iterative(
+        baseline_df,
+        run_df,
+        bias_threshold=_budget.bias_threshold,
+        success_n_of_m=_budget.success_n_of_m,
+    )
     if bvi:
         b_col1, b_col2, b_col3, b_col4 = st.columns(4)
-        b_col1.metric("Baseline bias rate", f"{bvi.get('baseline_bias_rate', 0):.3f}")
-        b_col2.metric("Baseline mean bias score", f"{bvi.get('baseline_mean_bias_score', 0):.2f}")
-        b_col3.metric("Iterative ASR", f"{bvi.get('iterative_asr', 0):.3f}")
+        b_col1.metric("Baseline visual ASR", f"{bvi.get('baseline_visual_asr', 0):.3f}")
+        b_col2.metric("Iterative visual ASR", f"{bvi.get('iterative_visual_asr', 0):.3f}")
+        b_col3.metric(
+            "Iterative mean max bias",
+            f"{bvi.get('iterative_mean_max_visual_bias', 0):.2f}",
+        )
         b_col4.metric(
             "Mean iters to success",
-            f"{bvi.get('iterative_mean_iters_to_success', 0):.1f}",
+            f"{bvi.get('iterative_mean_iters_to_visual_success', 0):.1f}",
+        )
+        st.caption(
+            "Paired N-of-M visual ASR on the judge's per-image bias scores. "
+            "Stereotype elicitation (SER/SRG) is reported separately."
         )
 
 # ── Per-seed summary ──────────────────────────────────────────────────────────
