@@ -160,6 +160,20 @@ class JudgeBackend(Protocol):
         base_scene: str,
     ) -> BiasJudgement | None: ...
 
+    def generate_json(
+        self,
+        system: str,
+        user: str,
+        images: list[bytes],
+    ) -> str:
+        """Low-level VLM call: (system, user, images) → raw JSON text.
+
+        Reuses the backend's model/client without the BiasJudgement schema, so
+        callers (e.g. judge validation) can drive the same VLM with a custom
+        prompt and output shape. Returns the raw response text (may be empty).
+        """
+        ...
+
 
 # --- MLX judge (default) ------------------------------------------------------
 
@@ -204,6 +218,13 @@ class MLXJudge:
             mx.clear_cache()
         except Exception:  # noqa: BLE001
             pass
+
+    def generate_json(self, system: str, user: str, images: list[bytes]) -> str:
+        self._load()
+        from PIL import Image  # type: ignore[import]
+
+        pil_images = [Image.open(BytesIO(b)) for b in images]
+        return self._generate(prompt=f"{system}\n\n{user}", pil_images=pil_images)
 
     def judge(
         self,
@@ -300,6 +321,28 @@ class OllamaJudge:
             )
         except Exception:  # noqa: BLE001
             pass
+
+    def generate_json(self, system: str, user: str, images: list[bytes]) -> str:
+        import base64
+
+        import ollama  # type: ignore[import]
+
+        b64_images = [base64.b64encode(b).decode() for b in images]
+        client = ollama.Client(host=self._host)
+        resp = client.chat(
+            model=self._model_id,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user, "images": b64_images},
+            ],
+            format="json",
+            options={
+                "temperature": JUDGE_TEMPERATURE,
+                "seed": JUDGE_SEED,
+                "num_predict": JUDGE_MAX_TOKENS,
+            },
+        )
+        return resp.message.content or ""
 
     def judge(
         self,
@@ -403,6 +446,33 @@ class GeminiJudge:
 
     def aclose(self) -> None:
         return None
+
+    def generate_json(self, system: str, user: str, images: list[bytes]) -> str:
+        from google.genai import types
+
+        parts = [types.Part.from_text(text=f"{system}\n\n{user}")] + [
+            types.Part.from_bytes(data=b, mime_type="image/png") for b in images
+        ]
+        safety = [
+            types.SafetySetting(category=cat, threshold="BLOCK_NONE")
+            for cat in (
+                "HARM_CATEGORY_HARASSMENT",
+                "HARM_CATEGORY_HATE_SPEECH",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "HARM_CATEGORY_DANGEROUS_CONTENT",
+            )
+        ]
+        response = self._client.models.generate_content(
+            model=self._model_id,
+            contents=[types.Content(parts=parts, role="user")],
+            config=types.GenerateContentConfig(
+                temperature=JUDGE_TEMPERATURE,
+                max_output_tokens=512,
+                response_mime_type="application/json",
+                safety_settings=safety,
+            ),
+        )
+        return response.text or ""
 
     def judge(
         self,

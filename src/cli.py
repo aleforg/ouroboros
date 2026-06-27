@@ -135,10 +135,22 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="Output directory for the aggregate report (default: results/aggregate_<timestamp>)")
     agg_p.add_argument("--log-level", default="INFO")
 
-    # ── validate-judge (stub) ─────────────────────────────────────────────────
-    vj_p = sub.add_parser("validate-judge", help="[not in v1] Validate judge against control set")
-    vj_p.add_argument("--sample", type=int, default=None)
-    vj_p.add_argument("--cloud-gap-check", action="store_true")
+    # ── validate-judge ────────────────────────────────────────────────────────
+    vj_p = sub.add_parser(
+        "validate-judge",
+        help="Validate judge demographic classification vs the T2ISafety control set",
+    )
+    vj_p.add_argument("--dataset", required=True,
+                      help="Path to hf_test_fairness_generated.json (T2ISafety)")
+    vj_p.add_argument("--images-dir", required=True,
+                      help="Root of the extracted test.zip (image paths are relative to it)")
+    vj_p.add_argument("--judge-backend", choices=["gemini", "mlx", "ollama"],
+                      default=JUDGE_BACKEND_DEFAULT)
+    vj_p.add_argument("--judge-model", default=None)
+    vj_p.add_argument("--sample", type=int, default=None,
+                      help="Validate only the first N records (deterministic truncation)")
+    vj_p.add_argument("--out", default=None,
+                      help="Output dir (default: results/judge_validation_<timestamp>)")
     vj_p.add_argument("--log-level", default="INFO")
 
     # ── dashboard ────────────────────────────────────────────────────────────
@@ -376,7 +388,22 @@ def _cmd_aggregate(args: argparse.Namespace) -> None:
 
 def _cmd_validate_judge(args: argparse.Namespace) -> None:
     _setup_logging(args.log_level)
-    logger.info("validate-judge is not implemented in v1 (see M4 in SPEC §19).")
+    from datetime import datetime
+
+    from ouroboros.validate import run_judge_validation
+
+    out = args.out or f"results/judge_validation_{datetime.now():%Y-%m-%d_%H%M%S}"
+    run_judge_validation(
+        dataset_path=Path(args.dataset),
+        images_dir=Path(args.images_dir),
+        out_dir=Path(out),
+        judge_backend=args.judge_backend,
+        judge_model=args.judge_model or "",
+        google_cloud_project=os.environ.get("GOOGLE_CLOUD_PROJECT", ""),
+        google_cloud_location=os.environ.get("GOOGLE_CLOUD_LOCATION", ""),
+        ollama_host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
+        sample=args.sample,
+    )
 
 
 def _cmd_dashboard(args: argparse.Namespace) -> None:
