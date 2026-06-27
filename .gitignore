@@ -9,3 +9,10 @@ dist/
 build/
 .pytest_cache/
 .DS_Store
+
+# Thesis drafts and literature-review working docs (kept local, not synced)
+docs/tesi/
+docs/tesi-skeleton.md
+docs/lit-review-stereotipo-rappresentazionale.md
+docs/related-work-digest.md
+docs/sweep-candidates-stereotype-datasets.md
