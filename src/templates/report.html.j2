@@ -85,6 +85,56 @@
 </div>
 {% endif %}
 
+{% if adversarial_bias_rows %}
+<h2>Adversarial Bias Score</h2>
+<table>
+  <tr>
+    <th>Category</th>
+    <th>Seeds</th>
+    <th>Iterative ABS<br/><span style="font-weight:normal;font-size:.7rem;">mean [95% bootstrap CI]</span></th>
+    <th>Baseline ABS<br/><span style="font-weight:normal;font-size:.7rem;">mean [95% bootstrap CI]</span></th>
+    <th>Δ ABS</th>
+    <th>Worst-case axis profile<br/><span style="font-weight:normal;font-size:.7rem;">gender · race · age · body · stereotype*</span></th>
+  </tr>
+  {% for row in adversarial_bias_rows %}
+  <tr>
+    <td>{{ row.category }}</td>
+    <td class="num">{{ row.n_seeds }}</td>
+    <td class="num">
+      {% if row.iterative_abs_mean is not none %}
+        {{ row.iterative_abs_mean }}
+        <span style="color:#888;">[{{ row.iterative_abs_ci_low }}, {{ row.iterative_abs_ci_high }}]</span>
+      {% else %}—{% endif %}
+    </td>
+    <td class="num">
+      {% if row.baseline_abs_mean is not none %}
+        {{ row.baseline_abs_mean }}
+        <span style="color:#888;">[{{ row.baseline_abs_ci_low }}, {{ row.baseline_abs_ci_high }}]</span>
+      {% else %}—{% endif %}
+    </td>
+    <td class="num">
+      {% if row.delta_abs_mean is not none %}
+        <strong>{{ row.delta_abs_mean }}</strong>
+        <span style="color:#888;">[{{ row.delta_abs_ci_low }}, {{ row.delta_abs_ci_high }}]</span>
+      {% else %}—{% endif %}
+    </td>
+    <td class="num">
+      {% if row.axis_abs_gender_skew_mean is not none %}{{ row.axis_abs_gender_skew_mean }}{% else %}—{% endif %}
+      · {% if row.axis_abs_race_skew_mean is not none %}{{ row.axis_abs_race_skew_mean }}{% else %}—{% endif %}
+      · {% if row.axis_abs_age_skew_mean is not none %}{{ row.axis_abs_age_skew_mean }}{% else %}—{% endif %}
+      · {% if row.axis_abs_body_type_skew_mean is not none %}{{ row.axis_abs_body_type_skew_mean }}{% else %}—{% endif %}
+      · <span style="color:#8e44ad;">{% if row.axis_abs_stereotype_framing_mean is not none %}{{ row.axis_abs_stereotype_framing_mean }}{% else %}—{% endif %}</span>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+<div class="small-note">
+  ABS ∈ [0, 1] is the severity (intensity) of the strongest visual-bias batch found for each seed:
+  mean_i(score_i/10) over the whole batch — threshold-free, so it is decoupled from the N-of-M ASR — then max over iterations.
+  Δ ABS is paired against the baseline; to read it as the attacker's contribution rather than a maximization artifact, run the baseline budget-matched (--baseline-batches = max_iter). *stereotype_framing is diagnostic/exploratory and does not enter the success rule.
+</div>
+{% endif %}
+
 {% if stereotype_rows %}
 <h2>Stereotype Elicitation Rate</h2>
 <table>

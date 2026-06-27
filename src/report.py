@@ -25,6 +25,10 @@ from ouroboros.metrics.agreement import (
     judge_fairface_axis_spearman,
     judge_fairface_gender_agreement,
 )
+from ouroboros.metrics.adversarial import (
+    adversarial_bias_by_category,
+    adversarial_bias_per_seed,
+)
 from ouroboros.metrics.fairness import bls_gender_alignment_summary, distribution_gap_summary
 
 logger = logging.getLogger(__name__)
@@ -327,6 +331,10 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
     bvi = baseline_vs_iterative(
         baseline_df, run_df, bias_threshold=bias_threshold, success_n_of_m=success_n_of_m
     )
+    abs_seed_df = adversarial_bias_per_seed(
+        run_df, baseline_df, bias_threshold=bias_threshold
+    )
+    abs_cat_df = adversarial_bias_by_category(abs_seed_df)
     stereotype_df = stereotype_elicitation_summary(baseline_df, run_df)
     asr_iter_df = asr_vs_iter(run_df) if not run_df.empty else None
     variance_df = intra_batch_variance(run_df) if not run_df.empty else None
@@ -407,6 +415,10 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         axis_df.to_csv(report_dir / "per_axis.csv", index=False)
     if not stereotype_df.empty:
         stereotype_df.to_csv(report_dir / "stereotype_elicitation.csv", index=False)
+    if not abs_seed_df.empty:
+        abs_seed_df.to_csv(report_dir / "adversarial_bias_per_seed.csv", index=False)
+    if not abs_cat_df.empty:
+        abs_cat_df.to_csv(report_dir / "adversarial_bias_by_category.csv", index=False)
     if asr_iter_df is not None and not asr_iter_df.empty:
         asr_iter_df.to_csv(report_dir / "asr_vs_iter.csv", index=False)
     if variance_df is not None and not variance_df.empty:
@@ -457,6 +469,7 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         summary=summary_df.to_dict("records") if not summary_df.empty else [],
         per_category_rows=cat_df.to_dict("records") if not cat_df.empty else [],
         baseline_vs_iter=bvi,
+        adversarial_bias_rows=abs_cat_df.to_dict("records") if not abs_cat_df.empty else [],
         stereotype_rows=stereotype_df.to_dict("records") if not stereotype_df.empty else [],
         clusters=clusters_data,
         thumbs_by_category=thumbs_by_category,
@@ -499,6 +512,10 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
     logger.info("  per_axis.csv                   → %d rows", len(axis_df) if axis_df is not None and not axis_df.empty else 0)
     if not stereotype_df.empty:
         logger.info("  stereotype_elicitation.csv     → %d rows", len(stereotype_df))
+    if not abs_seed_df.empty:
+        logger.info("  adversarial_bias_per_seed.csv  → %d rows", len(abs_seed_df))
+    if not abs_cat_df.empty:
+        logger.info("  adversarial_bias_by_category.csv → %d rows", len(abs_cat_df))
     logger.info("  asr_vs_iter.csv                → %d rows", len(asr_iter_df) if asr_iter_df is not None else 0)
     logger.info("  intra_batch_variance.csv       → %d rows", len(variance_df) if variance_df is not None else 0)
     if fairface_df is not None and not fairface_df.empty:
@@ -558,6 +575,7 @@ def _render_html(
     summary: list[dict],
     per_category_rows: list[dict],
     baseline_vs_iter: dict,
+    adversarial_bias_rows: list[dict],
     stereotype_rows: list[dict],
     clusters: list[dict],
     thumbs_by_category: dict[str, list[str]],
@@ -583,6 +601,7 @@ def _render_html(
         summary=summary,
         per_category=per_category_rows,
         baseline_vs_iter=baseline_vs_iter if baseline_vs_iter else None,
+        adversarial_bias_rows=adversarial_bias_rows,
         stereotype_rows=stereotype_rows,
         clusters=clusters,
         thumbs_by_category=thumbs_by_category,
