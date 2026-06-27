@@ -238,15 +238,17 @@ Una riga `run.jsonl` (formato v2 con campo `target_backend` e `ram_gb`):
 
 ## Comandi CLI esposti
 
-Il binario `ouroboros` (entry point in `pyproject.toml` → `cli.main`) espone tre subcommand:
+Il binario `ouroboros` (entry point in `pyproject.toml` → `cli.main`) espone i subcommand:
 
 | Subcommand | Scopo |
 |---|---|
-| `ouroboros run --mode {test,full} [flags]` | Esegue il loop PAIR e scrive `run.jsonl` |
+| `ouroboros run --mode {test,full} [flags]` | Esegue il loop PAIR e scrive `run.jsonl` (incl. `--resume`/`--replay`/`--baseline`/`--baseline-batches`) |
 | `ouroboros report <run_id>` | Post-hoc: produce `report/` con CSV + `report.html` self-contained + chart SVG ASR-vs-iter |
 | `ouroboros aggregate <run_id_1> <run_id_2> [...]` | Cross-run: aggrega N run indipendenti dello stesso config → ASR mean ± std per categoria + per-seed stability |
+| `ouroboros validate-judge --dataset … --images-dir …` | Valida la classificazione demografica del judge contro il control set T2ISafety (accuracy/macro-F1/κ) — vedi [08-deviations.md](08-deviations.md) A.18 |
+| `ouroboros dashboard` | Lancia la dashboard Streamlit (richiede l'extra `[web]`) |
 
-I subcommand stub `validate-judge` e `dashboard` esistono ma non sono implementati nella v2.
+Nota storica: nella v1/v2 `validate-judge` e `dashboard` erano stub (`"not implemented in v1"`); entrambi sono ora implementati (vedi [08-deviations.md](08-deviations.md) §B.3).
 
 ## Da dove proseguire
 

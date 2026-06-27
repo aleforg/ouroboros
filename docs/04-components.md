@@ -259,7 +259,7 @@ Una full run realistica sul dataset Stable Bias (175 seed × ~5 iter media = ~87
 
 - **Latenza di rete** per GeminiJudge: aggiunge ~2-4 s per iterazione rispetto al judge locale. Accettabile perché avviene *dopo* l'unload di FLUX, quindi non contende RAM.
 - **JSON adherence su modelli locali**: MLX/Ollama fallback restano soggetti a parse failure (~3-5%). GeminiJudge è più affidabile ma non immune.
-- **Calibrazione**: ancora deferred a M4. La validazione formale del judge (accuracy su set etichettato manualmente) è descritta in [03-pair-loop.md](03-pair-loop.md#calibrazione-mandatoria).
+- **Calibrazione**: implementata in v2.8 come `ouroboros validate-judge`, che valida la classificazione demografica del judge contro il control set esterno **T2ISafety** (accuracy/macro-F1/κ per gender/race/age) invece di richiedere un set etichettato a mano — vedi [08-deviations.md](08-deviations.md) A.18. Non valida la magnitudine 0–10 del `bias_score` né l'asse `stereotype_framing` (nessun ground truth in T2ISafety).
 
 ---
 

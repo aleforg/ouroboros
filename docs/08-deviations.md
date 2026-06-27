@@ -338,6 +338,33 @@ Revisione della A.16. La branch OR su `stereotype_framing` viene **rimossa** dal
 
 **Codice**: `src/loop.py` (`_success_rule` + call site + stringa), `src/config.py` (commento `stereotype_threshold`), `src/metrics/__init__.py` (`baseline_vs_iterative` + helper `_n_of_m`/`_max_score`), `src/fairface.py` (`_load_image_index(selection=)`, `process_run(selection=)`, `load_fairface(filename=)`), `src/report.py` (`_success_params`, `_terminal_run_subset`, `_kl_delta`, `_run_fairface_pipeline`, wiring + nuovi CSV), `src/templates/report.html.j2` (sezioni Visual ASR + FairFace Δ KL), `src/web/pages/3_Results.py`; test: `tests/test_loop_success_rule.py`, `tests/test_metrics.py`, `tests/test_fairface.py`. Suite 226/226 verde.
 
+### A.18 `validate-judge` implementato su control set T2ISafety ✦ NUOVO (v2.8)
+
+Lo stub `validate-judge` (che stampava *"not implemented in v1"*, vedi §B.3) è sostituito da una validazione reale del judge contro il benchmark esterno **T2ISafety** (Li et al., CVPR 2025), human-annotated e apache-2.0 — così nessuna annotazione manuale è richiesta. Risponde al gap (c) ("assenza di validazione del judge"): il judge VLM **legge** genere/etnia/età come gli annotatori umani?
+
+**Cosa cambia**:
+
+1. **Modalità di classificazione closed-set** (`src/validate.py`): il judge è guidato con un prompt dedicato a classificare l'attributo demografico della persona più prominente entro lo spazio di label di T2ISafety (gender 2-class, race 5-class, age 4-class). NON è il prompt di produzione: il judge di produzione emette `observed_demographics` con la *race come tonalità di pelle* (light/medium/dark), non commensurabile con le 5 categorie etniche — limite dichiarato nei caveat del report.
+2. **Hook low-level sui backend** (`src/judge.py`): nuovo `generate_json(system, user, images)` su `MLXJudge`/`OllamaJudge`/`GeminiJudge`, che riusa modello/client del backend senza lo schema `BiasJudgement`, così la validazione può guidare lo stesso VLM con prompt e shape custom.
+3. **Metriche** (`src/validate.py`): per attributo — accuracy, macro-F1, Cohen's κ, P/R/F1 per classe, confusion matrix, tasso di predizioni invalid; più accuracy per sottogruppo stile *Gender-Shades* (gender sliced per race e per age). Output `judge_validation.json` + `judge_predictions.jsonl`.
+4. **CLI** (`src/cli.py`): `ouroboros validate-judge --dataset hf_test_fairness_generated.json --images-dir <root test.zip> [--judge-backend … --sample N --out …]`.
+
+**Cosa NON valida** (caveat espliciti nel report): la magnitudine 0–10 del `bias_score` e l'asse `stereotype_framing` (T2ISafety non ne ha ground truth); le immagini sono non-FLUX (SD/PixArt/…) → lieve domain shift; T2ISafety non riporta IAA per la fairness.
+
+**Codice**: `src/validate.py` (nuovo), `src/judge.py` (`generate_json` ×3), `src/cli.py` (subparser + `_cmd_validate_judge`); test: `tests/test_validate.py`. Helper puri (parsing label, metriche) import-safe e testati senza chiamate al modello.
+
+### A.19 Baseline budget-matched best-of-T (`--baseline-batches`) ✦ NUOVO (v2.8)
+
+`ModeBudget`/`RunConfig` acquisiscono `baseline_batches` (default 1 = single-shot classico). Con `--baseline-batches = max_iter` la baseline diventa **budget-matched** (best-of-T static prompting): poiché il lato iterativo pesca fino a `max_iter` batch e il report tiene il max per ABS / N-of-M, la baseline deve poter pescare lo stesso numero di batch perché `ΔABS`/`ΔASR` isolino la *ricerca* dell'attacker e non il vantaggio di massimizzazione. `baseline_vs_iterative` raggruppa il lato baseline per seed (any-batch-hits / max-over-batches), simmetrico col lato iterativo e invariato per `K=1`. Dettaglio in [06-metrics.md](06-metrics.md) §6.
+
+**Codice**: `src/config.py` (`baseline_batches`), `src/baseline.py` (loop su `n_batches`, namespace `baseline_<k>`), `src/metrics/__init__.py` (`baseline_vs_iterative` group-by-seed), `src/cli.py` (`--baseline-batches`).
+
+### A.20 Adversarial Bias Score (ABS) ✦ NUOVO (v2.8)
+
+Nuova metrica di **severità** threshold-free, complementare all'ASR (frequenza): `ABS_t = mean_i(score_i/10)` per batch, max sulle iterazioni per seed, `ΔABS` appaiato vs baseline con bootstrap CI 95% per categoria. Risponde all'osservazione che l'ASR binarizzata perde l'intensità del bias. Definizione, motivazione (perché la soglia è fuori dalla formula) e output in [06-metrics.md](06-metrics.md) §6-bis.
+
+**Codice**: `src/metrics/adversarial.py` (nuovo), `src/report.py` (CSV `adversarial_bias_per_seed.csv`/`adversarial_bias_by_category.csv` + wiring template), `src/templates/report.html.j2` (sezione "Adversarial Bias Score"); test: `tests/test_metrics_adversarial.py`.
+
 ---
 
 ## B. Differenze rispetto al design contract v1
@@ -373,11 +400,11 @@ Il design contract §19 elenca 7 milestone (M0-M6). Implementato in v1: **M0-M3*
 | M1 — Local judge + baseline | ✅ implementato |
 | M2 — PAIR loop | ✅ implementato |
 | M3 — Reporting (metrics + cluster + HTML) | ✅ implementato |
-| M4 — Judge calibration (control set + cloud gap-check) | ⏳ deferred |
-| M5 — Streamlit dashboard | ⏳ deferred |
+| M4 — Judge calibration (control set) | ✅ implementato (v2.8, vedi A.18) — control set esterno T2ISafety; il "cloud gap-check" resta non implementato |
+| M5 — Streamlit dashboard | ✅ implementato (`ouroboros dashboard`, extra `[web]`) |
 | M6 — Full-mode hardening | ⏳ deferred |
 
-**Cosa significa "deferred"**: lo scheletro CLI esiste (`ouroboros validate-judge`, `ouroboros dashboard`) ma le funzioni stampano *"not implemented in v1"*.
+**Aggiornamento v2.8**: M4 e M5 non sono più stub. `validate-judge` valida la classificazione demografica del judge contro T2ISafety (A.18); `dashboard` lancia l'app Streamlit multi-pagina. Resta non implementato il solo "cloud gap-check" (confronto giudice locale vs `gemini-2.5-pro` sullo stesso bundle, citato in [03-pair-loop.md](03-pair-loop.md)). M6 (full-mode hardening) resta deferred.
 
 ### B.4 `seeds.py` minimale ✦ DEVIAZIONE
 
