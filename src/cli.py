@@ -62,6 +62,11 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--mode", choices=["test", "full"], default="test")
     run_p.add_argument("--baseline", choices=["single-shot"], default=None,
                        help="Also run a single-shot baseline before the PAIR loop")
+    run_p.add_argument("--baseline-batches", type=int, default=None, metavar="K",
+                       help="Base-scene batches per seed for the baseline (default 1). "
+                            "Pass 'max-iter' worth (= max_iter) for a budget-matched, "
+                            "best-of-T baseline so ΔABS/ΔASR isolate the attacker rather "
+                            "than the maximization advantage of the iterative side.")
     run_p.add_argument("--resume", metavar="RUN_ID", default=None,
                        help="Resume an interrupted run")
     run_p.add_argument("--replay", metavar="RUN_ID", default=None,
@@ -229,6 +234,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
         output_dir=args.output_dir,
         seeds_filter=args.seeds_filter,
         run_baseline=args.baseline is not None,
+        baseline_batches=(args.baseline_batches if args.baseline_batches and args.baseline_batches > 0 else 1),
         allow_swap=args.allow_swap,
         aggressive_unload=aggressive_unload,
         ollama_host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),

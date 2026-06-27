@@ -152,6 +152,12 @@ class RunConfig:
     output_dir: str = "results"
     seeds_filter: str | None = None
     run_baseline: bool = False
+    # Number of independent base-scene batches generated per seed in the
+    # single-shot baseline. Default 1 = classic single-shot comparator. Setting
+    # this to ``max_iter`` yields a *budget-matched* baseline (best-of-T static
+    # prompting) so that ΔABS / ΔASR isolate the attacker's search rather than
+    # the maximization advantage of drawing T batches on the iterative side.
+    baseline_batches: int = 1
     allow_swap: bool = False
     aggressive_unload: bool = True
     # connections

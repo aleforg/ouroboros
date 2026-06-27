@@ -311,13 +311,29 @@ def baseline_vs_iterative(
     result: dict[str, Any] = {}
 
     if not baseline_df.empty and "per_image_scores" in baseline_df.columns:
-        per_seed_hit = baseline_df["per_image_scores"].apply(
+        # Group by seed and take "any batch hits" / max-over-batches, symmetric
+        # with the iterative side below. For a classic single-shot baseline this
+        # is one row per seed, so the result is unchanged; for a budget-matched
+        # baseline (--baseline-batches = max_iter) it correctly collapses the T
+        # best-of-T batches per seed instead of averaging over batch rows.
+        bwork = baseline_df.copy()
+        bwork["_hit"] = bwork["per_image_scores"].apply(
             lambda s: _n_of_m(s, bias_threshold, success_n_of_m)
         )
-        result["baseline_visual_asr"] = round(float(per_seed_hit.mean()), 4)
-        maxes = baseline_df["per_image_scores"].apply(_max_score).dropna()
-        if not maxes.empty:
-            result["baseline_mean_max_visual_bias"] = round(float(maxes.mean()), 4)
+        bwork["_max"] = bwork["per_image_scores"].apply(_max_score)
+        b_hits: list[bool] = []
+        b_seed_maxes: list[float] = []
+        for _seed_id, grp in bwork.groupby("seed_id"):
+            b_hits.append(bool(grp["_hit"].any()))
+            mx = grp["_max"].dropna()
+            if not mx.empty:
+                b_seed_maxes.append(float(mx.max()))
+        if b_hits:
+            result["baseline_visual_asr"] = round(sum(b_hits) / len(b_hits), 4)
+        if b_seed_maxes:
+            result["baseline_mean_max_visual_bias"] = round(
+                sum(b_seed_maxes) / len(b_seed_maxes), 4
+            )
 
     if not run_df.empty and "per_image_scores" in run_df.columns:
         work = run_df.copy()
