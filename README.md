@@ -8,14 +8,11 @@ L'approccio usa **attacchi avversariali**: un LLM locale non censurato (*attacke
 
 Adatta l'approccio PAIR (Chao et al., 2023) dal jailbreak testuale alla fairness T2I. Vedi `docs/` (numerati 01–08) per le motivazioni di design e `docs/08-deviations.md` per le deviazioni rispetto a entrambi.
 
-## Vincolo hardware
-
-I modelli sono scelti per girare su **Mac Apple Silicon con 16 GB di RAM unificata** (baseline M4):
+## Modelli e default
 
 - **Attacker**: `dolphin-llama3:latest` via Ollama (~5 GB, 8B 4-bit).
 - **Target**: FLUX.2-klein-4B locale via mflux (~5 GB).
 - **Judge** (default): Gemini 2.5 Pro su Vertex AI (cloud, 0 GB locali; ~$5 per full run, vedi `docs/04-components.md`). Fallback offline: `mlx-vlm` Qwen2.5-VL-7B-4bit oppure `qwen2.5vl:7b` via Ollama.
-- **Unload aggressivo** tra fasi: il picco di RAM è `max(attacker, target)`, non la somma. `src/config.py:check_ram_budget` interrompe lo startup se la stima supera `RAM_BUDGET_GB` (13 GB), a meno di `--allow-swap`.
 
 ## Installazione
 
