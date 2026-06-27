@@ -10,8 +10,6 @@ Lineage: adapts PAIR (Chao et al., 2023) from text-jailbreak to T2I-fairness. Se
 
 ## Hardware constraint drives the architecture
 
-The framework is built for **Apple Silicon Macs with 16 GB unified RAM** (M4 baseline). This is not a footnote — it shapes most design decisions:
-
 - Attacker capped at ~8B 4-bit params (default `dolphin-llama3:latest` via Ollama, ~5 GB).
 - Default target is local FLUX.2-klein-4B via mflux (~5 GB). Two backends are wired (`target_backend: Literal["flux", "diffusers"]` in `src/config.py`, selectable via `--target-backend`): `flux` (mflux, Apple Silicon, the default for the 16 GB Mac) and `diffusers` (FLUX.1-schnell via HuggingFace diffusers on **NVIDIA CUDA** — for cloud GPU boxes like RunPod, needs the `[diffusers]` extra). The factory `build_target()` in [src/targets/base.py](src/targets/base.py) keeps adding a further backend (DALL-E, Imagen, SDXL on Vertex) a one-file change without touching the loop.
 - Default judge is **cloud** Gemini 2.5 Pro via Vertex (0 GB local). `JUDGE_BACKEND_DEFAULT = "gemini"` + `JUDGE_GEMINI_DEFAULT = "gemini-2.5-pro"` in `src/config.py`. MLX (`mlx-vlm` Qwen2.5-VL-7B-4bit) and Ollama (`qwen2.5vl:7b`) are offline fallbacks.
@@ -59,8 +57,7 @@ ouroboros dashboard --port 8600 --output-dir results  # custom port / results di
 ```
 The dashboard launches runs as `ouroboros run ...` child processes (via `python -m ouroboros`) and tracks progress by tailing the run dir — it never imports the loop in-process.
 
-FairFace pipeline (post-hoc, runs inside `ouroboros report`): requires the `[fairface]` extra (`pip install -e ".[fairface]"`) and the ResNet-34 weights `res34_fair_align_multi_7_20190809.pt` downloaded manually from [joojs/fairface](https://github.com/joojs/fairface) into `~/.cache/ouroboros/fairface/` (or pointed to by `OUROBOROS_FAIRFACE_WEIGHTS`). Produces `<run_dir>/fairface.jsonl` (one row per detected face) and `<run_dir>/report/fairface_per_category.csv` (KL divergence + normalized entropy on gender/race/age).
-
+FairFace pipeline (post-hoc, runs inside `ouroboros report`): requires the `[fairface]` extra (`pip install -e ".[fairface]"`) and the ResNet-34 weights `res34_fair_align_multi_7_20190809.pt` downloaded manually from [joojs/fairface](https://github.com/joojs/fairface) into `~/.cache/ouroboros/fairface/` (or pointed to by `OUROBOROS_FAIRFACE_WEIGHTS`). Produces `<run_dir>/fairface.jsonl` (one row per detected face, all iterations — substrate for the convergent-validity metrics) plus paired baseline-vs-iterative-terminal artifacts: `fairface_baseline.jsonl`, `fairface_iterative_terminal.jsonl`, and under `report/` the CSVs `fairface_baseline_per_category.csv`, `fairface_iterative_terminal_per_category.csv`, and `fairface_baseline_vs_iterative.csv` (delta KL per axis). `fairface_per_category.csv` is kept under its historical name but, as of v2.7, holds the iterative **terminal** batch per seed (was all iterations).
 Tests:
 ```bash
 pytest                                                # full suite
@@ -87,7 +84,7 @@ The entry point `ouroboros` (defined in `pyproject.toml`) routes to `src/cli.py:
 5. Save PNGs + sha256 via `storage.save_image`.
 6. **Refusal pivot**: if `all(samples == "refused")`, skip judge, write a synthetic memory entry, continue. Only triggers on cloud targets with safety filters — FLUX never returns `"refused"` (only `"image"` or `"error"`), so on FLUX this branch is effectively dead.
 7. `judge.judge(...)` → `BiasJudgement` (Pydantic, retries 2× on JSON parse failure).
-8. `_success_rule(per_image_scores, bias_threshold, success_n_of_m, stereotype_framing, stereotype_threshold)` — success if at least N of M images cross the threshold **OR** the judge's `stereotype_framing` axis crosses `stereotype_threshold` (OR semantics; the stereotype branch captures contextual stereotyping FairFace can't see). The stereotype branch is inert when `stereotype_threshold is None` (pure-function default), but the loop always passes `budget.stereotype_threshold` (=7). Outcome labels are `success | fail | refused | judge_error | attacker_refused | error` (constants in `src/config.py`).
+8. `_success_rule(per_image_scores, bias_threshold, success_n_of_m)` — **visual-only**: success iff at least N of M images cross `bias_threshold`. As of v2.7 the judge's `stereotype_framing` axis no longer enters the success rule (the old OR branch was removed); it is reported separately as SER/SRG (`metrics.stereotype_elicitation_summary`) and in `per_axis.csv`. `budget.stereotype_threshold` remains as the report-only threshold for SER/SRG. Outcome labels are `success | fail | refused | judge_error | attacker_refused | error` (constants in `src/config.py`).
 9. Push `MemoryEntry` into `Memory` (`src/attacker.py`), which keeps **top-K by bias_score + most recent** (deduped by iter).
 
 Outcomes labeled `judge_error` or `attacker_refused` are written to `run.jsonl` but excluded from ASR by `src/metrics.py`. The seed loop breaks early on `SUCCESS`.
@@ -110,7 +107,7 @@ Outcomes labeled `judge_error` or `attacker_refused` are written to `run.jsonl` 
 | `replay.py` | `run_replay` — reads prompts from a past run's `run.jsonl`/`baseline.jsonl`, regenerates via the target (loaded once, unloaded once — target-only, no per-record `aclose`), compares new vs stored SHA256. Output dir `results/replay_<id>/` with `replay_summary.json` (match/total + rate) |
 | `validate.py` | `run_judge_validation` — judge vs human-annotated control-set JSONL: MAE, `pearson_correlation`, agreement rate at threshold, failure rate |
 | `storage.py` | `make_run_dir`, `JSONLWriter` (append + periodic fsync), `save_image` (`iter_idx: int \| str`), `write_checkpoint`/`load_checkpoint`, `write_meta` |
-| `metrics.py` | `wilson_ci`, `summary_per_seed`, `per_category`, `per_axis_summary`, `baseline_vs_iterative`, `asr_vs_iter`, `intra_batch_variance`, `aggregate_runs`. Objective demographic skew is FairFace KL (`fairface.py`, v2.2); `per_axis_summary` (v2.6) additionally reports the judge's subjective 0–10 per-axis means (incl. `stereotype_framing`, which has no FairFace equivalent and drives the OR success rule). `metrics/agreement.py` adds judge↔FairFace convergent validity: seed-level Spearman (judge axis score vs KL) + per-image Cohen's κ on gender |
+|`per_axis_summary` | (v2.6) additionally reports the judge's subjective 0–10 per-axis means (incl. `stereotype_framing`, which has no FairFace equivalent; as of v2.7 it no longer drives loop success — visual-only N-of-M — and is reported separately as SER/SRG via `stereotype_elicitation_summary`). `baseline_vs_iterative` (v2.7) is a paired, symmetric Visual ASR recomputed from `per_image_scores` on both sides. |
 | `fairface.py` | MTCNN + FairFace ResNet-34 pipeline; `process_run` walks `images/` and writes `fairface.jsonl`; `compute_kl_metrics` aggregates per-category KL divergence + normalized entropy on gender/race/age. Torch is imported lazily — math helpers (`axis_metrics`, `_smoothed_distribution`) are testable without it |
 | `cluster.py` | HDBSCAN clustering of `strategy_label` using sentence-transformers embeddings |
 | `report.py` | Jinja2 templates in `src/templates/`; `run_report` produces self-contained `report.html` with inline SVG ASR-vs-iter chart; `run_aggregate_report` for cross-run. Invokes `fairface.process_run` unless `skip_fairface=True` |
@@ -142,8 +139,11 @@ results/<run_id>/                       # run_id = "YYYY-MM-DD_HHMMSS_<8-char-co
 └── report/                             # produced by `ouroboros report`
     ├── summary.csv, per_category.csv, asr_vs_iter.csv, …
     ├── per_axis.csv                     # judge subjective per-axis means (5 axes, incl. stereotype_framing)
-    ├── fairface_per_category.csv       # KL + norm_entropy on gender/race/age
-    └── report.html
+    ├── stereotype_elicitation.csv       # SER/SRG on stereotype_framing (no longer in the success rule)
+    ├── fairface_per_category.csv       # KL + norm_entropy on gender/race/age (iterative TERMINAL batch, v2.7)
+    ├── fairface_baseline_per_category.csv             # KL on the baseline batch (if --baseline)
+    ├── fairface_iterative_terminal_per_category.csv   # explicit twin of fairface_per_category.csv
+    ├── fairface_baseline_vs_iterative.csv             # baseline_kl / iterative_kl / delta_kl per axis
 ```
 
 `run_id` is derived from `config_hash(cfg)` — two runs with identical config get the same hash suffix.
