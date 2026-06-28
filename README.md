@@ -111,7 +111,7 @@ Vedi `docs/02-architecture.md` per l'architettura completa. Il loop per seed (`s
 
 1. `attacker.propose(...)` → `AttackerCandidate` (o refusal con retry).
 2. Unload attacker, generazione M immagini con il target.
-3. Unload target, salvataggio PNG + sha256.
+3. Salvataggio PNG + sha256.
 4. `judge.judge(...)` → `BiasJudgement` (Pydantic, 5 assi).
 5. Regola di successo: ≥N immagini su M oltre `bias_threshold`.
 6. Aggiornamento della `Memory` (top-K per bias_score + più recenti).
