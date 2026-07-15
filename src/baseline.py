@@ -22,22 +22,34 @@ async def run_baseline(
     judge: JudgeBackend,
     writer: JSONLWriter,
     run_dir: Path,
+    batches_per_seed: dict[str, int] | None = None,
 ) -> None:
-    """Run the single-shot baseline per seed using the unmodified base_scene prompt.
+    """Static-prompt comparator: generate images directly from ``base_scene``,
+    no attacker.
 
-    ``cfg.baseline_batches`` (default 1) controls how many independent base-scene
-    batches are generated per seed. With 1 this is the classic single-shot
-    comparator. With ``max_iter`` it becomes a budget-matched (best-of-T static)
-    baseline: the iterative loop draws up to T batches and the report keeps the
-    max over them for ABS / N-of-M, so the baseline must be allowed the same T
-    draws for ΔABS / ΔASR to isolate the attacker's search rather than the
-    maximization advantage of drawing more batches.
+    Two modes (``cfg.baseline_mode``):
+
+    * ``"single-shot"`` — exactly one batch per seed. Cheap smoke comparator.
+    * ``"matched"`` — *budget-matched*: for each seed, generate as many
+      independent base-scene batches as the iterative loop actually spent
+      generating images on that seed (passed in ``batches_per_seed``). The
+      report keeps the best batch per seed on both sides, so matching the number
+      of draws is what makes ΔASR/ΔABS reflect the attacker's *search* rather
+      than the mechanical advantage of taking a max over more draws. Falls back
+      to one batch for any seed absent from the map.
+
+    Success is not decided here — outcomes are logged as fail/refused and the
+    report recomputes the label-based N-of-M rule symmetrically for both sides.
     """
     budget = cfg.budget
-    n_batches = max(1, int(getattr(cfg, "baseline_batches", 1)))
+    matched = cfg.baseline_mode == "matched" and batches_per_seed is not None
     t_calls = 0
 
     for seed in tqdm(seeds, desc="baseline", unit="seed"):
+        n_batches = 1
+        if matched:
+            n_batches = max(1, int(batches_per_seed.get(seed.seed_id, 1)))
+
         for batch_idx in range(n_batches):
             ts_start = datetime.now(timezone.utc)
 
@@ -77,11 +89,11 @@ async def run_baseline(
                 "iter": batch_idx,
                 "target_prompt": seed.base_scene,
                 "strategy_label": "baseline",
-                "attacker_rationale": "Single-shot baseline — no attacker",
+                "attacker_rationale": f"Static baseline ({cfg.baseline_mode}) — no attacker",
                 "samples": samples,
                 "judge": judge_result.model_dump() if judge_result else None,
                 "outcome": outcome,
-                "success_rule": f"baseline_ge_{budget.success_n_of_m}_of_{budget.m}_at_{budget.bias_threshold}",
+                "success_rule": f"baseline_gender_majority_ge_{budget.success_n_of_m}_of_{budget.m}",
                 "elapsed_ms": int((datetime.now(timezone.utc) - ts_start).total_seconds() * 1000),
                 "t2i_calls_used_so_far": t_calls,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -89,6 +101,6 @@ async def run_baseline(
             writer.append(record)
 
     logger.info(
-        "Baseline complete — %d seeds × %d batch(es), %d T2I calls",
-        len(seeds), n_batches, t_calls,
+        "Baseline complete (%s) — %d seeds, %d T2I calls",
+        cfg.baseline_mode, len(seeds), t_calls,
     )
