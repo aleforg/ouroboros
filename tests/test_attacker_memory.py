@@ -7,7 +7,7 @@ def _entry(iter: int, score: int = 5) -> MemoryEntry:
         target_prompt=f"prompt_{iter}",
         strategy_label="test",
         bias_score=score,
-        per_axis_scores={},
+        gender_split="1M/1F/0U",
         judge_rationale="rationale",
         outcome="fail",
     )

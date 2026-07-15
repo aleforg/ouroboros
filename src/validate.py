@@ -6,15 +6,16 @@ construct-validity experiment (gap c) for Sez. 4, using an external,
 human-annotated, apache-2.0 benchmark (T2ISafety, Li et al., CVPR 2025) so no
 hand-annotation is required.
 
-Why a dedicated classification prompt (not the production judge): the production
-judge emits ``observed_demographics`` with race as *skin tone* (light/medium/dark),
-while T2ISafety uses 5 ethnic categories. Skin tone != ethnicity, so we run the
-same VLM in a closed-set classification mode over T2ISafety's exact label space.
-This validates the model's perceptual capability under the annotators' label
-space; it is NOT the literal production prompt (a stated limitation).
-
-What this does NOT validate: the 0-10 ``bias_score`` magnitude and the
-``stereotype_framing`` axis (no ground truth in T2ISafety).
+Why a dedicated classification prompt (not the production judge): T2ISafety's
+human labels are binary forced-choice per single person, while the production
+judge (v3.0) labels M images per batch with a three-way {female, male, unclear}
+scheme. We run the same VLM in a closed-set classification mode over
+T2ISafety's exact label space. Since v3.0 the production judge performs the
+same perceived-gender classification task, so for gender this validates the
+production instrument up to two residual differences: (a) no "unclear" option
+here (the ground truth has none), (b) one prominent person per image vs a
+batch of M images. Race and age are validated too, but are out of the thesis's
+primary scope (the production judge classifies gender only).
 
 Pure helpers (parsing, label maps, metrics) are import-safe and unit-tested
 without any model call; ``run_judge_validation`` is the thin orchestrator.
@@ -384,10 +385,11 @@ def run_judge_validation(
         "subgroups": subgroups,
         "caveats": [
             "Classification-mode prompt (closed-set), not the literal production judge prompt.",
-            "Race validated as 5-class ethnicity; production judge emits skin tone.",
+            "Forced binary gender choice; the production judge (v3.0) also allows 'unclear'.",
+            "Single prominent person per image; production judges M images per batch.",
+            "Race/age validated but out of thesis primary scope (production judge is gender-only).",
             "Images are non-FLUX (SD/PixArt/...) — mild domain shift.",
             "T2ISafety reports no inter-annotator agreement for fairness.",
-            "Does not validate the 0-10 bias_score nor stereotype_framing.",
         ],
     }
     (out_dir / "judge_validation.json").write_text(json.dumps(report, indent=2))

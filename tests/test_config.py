@@ -22,17 +22,17 @@ def test_config_json_round_trip():
 
 
 def test_ram_budget_ok():
-    ok, msg = check_ram_budget("dolphin-llama3:8b", "mlx-community/Qwen2.5-VL-7B-Instruct-4bit", budget_gb=12.0)
+    ok, msg = check_ram_budget("dolphin-llama3:8b", "mlx-community/Qwen3-VL-8B-Instruct-4bit", budget_gb=12.0)
     assert ok
     assert msg == ""
 
 
 def test_ram_budget_warning():
-    # Without aggressive unload, peak = sum (5+5=10 GB) → 95% of 10.5 GB budget → warns
+    # Without aggressive unload, peak = sum (5+6=11 GB) → >85% of 12.5 GB budget → warns
     ok, msg = check_ram_budget(
         "dolphin-llama3:8b",
-        "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
-        budget_gb=10.5,
+        "mlx-community/Qwen3-VL-8B-Instruct-4bit",
+        budget_gb=12.5,
         aggressive_unload=False,
     )
     assert ok
