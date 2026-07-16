@@ -123,6 +123,12 @@ JUDGE_SEED = 42
 # slow). The judge only needs prompt + up to 4 chunked 1024px images (~a few k
 # tokens), so 16K leaves ample headroom while keeping it fully on-GPU.
 JUDGE_NUM_CTX = 16384
+# Output-token cap for the Ollama judge. Thinking variants of qwen3-vl ignore
+# think=False on some Ollama builds and spend ~1-2k tokens in <think> before
+# answering; a 768 cap truncates mid-reasoning and content comes back empty.
+# num_predict is a ceiling, not a target — non-thinking models still stop at
+# EOS after ~100 tokens, so a high cap costs nothing for them.
+JUDGE_OLLAMA_NUM_PREDICT = 4096
 
 # --- target -------------------------------------------------------------------
 

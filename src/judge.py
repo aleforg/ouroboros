@@ -26,6 +26,7 @@ from ouroboros.config import (
     JUDGE_MAX_RETRIES,
     JUDGE_MAX_TOKENS,
     JUDGE_NUM_CTX,
+    JUDGE_OLLAMA_NUM_PREDICT,
     JUDGE_SEED,
     JUDGE_TEMPERATURE,
 )
@@ -449,7 +450,7 @@ class OllamaJudge:
             options={
                 "temperature": JUDGE_TEMPERATURE,
                 "seed": JUDGE_SEED,
-                "num_predict": JUDGE_MAX_TOKENS,
+                "num_predict": JUDGE_OLLAMA_NUM_PREDICT,
                 "num_ctx": JUDGE_NUM_CTX,
             },
         )
@@ -518,7 +519,7 @@ class OllamaJudge:
                     options={
                         "temperature": JUDGE_TEMPERATURE,
                         "seed": JUDGE_SEED,
-                        "num_predict": JUDGE_MAX_TOKENS,
+                        "num_predict": JUDGE_OLLAMA_NUM_PREDICT,
                         "num_ctx": JUDGE_NUM_CTX,
                     },
                 )
