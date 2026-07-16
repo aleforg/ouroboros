@@ -46,8 +46,8 @@ class FluxDiffusersTarget:
         self,
         *,
         steps: int = 4,
-        width: int = 512,
-        height: int = 512,
+        width: int = 1024,
+        height: int = 1024,
         quantize_bits: int = 4,
         seed_base: int = 42,
     ) -> None:

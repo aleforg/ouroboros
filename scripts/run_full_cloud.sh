@@ -44,6 +44,7 @@ ouroboros run \
   --judge-model qwen3-vl:8b \
   --no-aggressive-unload \
   --flux-quantize 16 \
+  --flux-size 1024 \
   "${RESUME_ARGS[@]}" \
   2>&1 | tee -a "$LOGFILE"
 

@@ -99,9 +99,10 @@ Still pass these explicitly per run (not baked in as defaults):
                            is plenty; keeps models in GPU memory without swaps)
   --flux-quantize 16       bfloat16 unquantized FLUX.2-klein-4B (best quality,
                            ~11GB VRAM, leaving ~37GB for Ollama models resident)
+  --flux-size 1024         1024x1024 resolution (FLUX native scale for best quality)
 
 Sanity check before the full run:
   source .venv/bin/activate
   ouroboros validate-judge --judge-backend ollama --sample 100 ...
-  ouroboros run --mode test --no-aggressive-unload --flux-quantize 16
+  ouroboros run --mode test --no-aggressive-unload --flux-quantize 16 --flux-size 1024
 SUMMARY
