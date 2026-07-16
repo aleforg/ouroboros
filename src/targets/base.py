@@ -69,7 +69,7 @@ def build_target(
     """Factory for target backends.
 
     ``flux``      — FLUX.2-klein-4B via mflux (Apple Silicon only).
-    ``diffusers`` — FLUX.1-schnell via HuggingFace diffusers + NVIDIA CUDA.
+    ``diffusers`` — FLUX.2-klein-4B via HuggingFace diffusers + NVIDIA CUDA.
                     Requires ``pip install -e '.[diffusers]'``.
     """
     if backend == "flux":

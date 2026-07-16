@@ -68,14 +68,17 @@ class FluxDiffusersTarget:
             return
 
         import torch
-        from diffusers import FluxPipeline
+        # FLUX.2 has a new architecture (single Qwen3 text encoder, not FLUX.1's
+        # CLIP + T5 pair) and its own pipeline / transformer classes. Loading it
+        # with FLUX.1's FluxPipeline fails on missing text_encoder_2/tokenizer_2.
+        from diffusers import Flux2KleinPipeline
 
         logger.info(
             "Loading %s (quantize_bits=%d) …", _MODEL_ID, self._quantize_bits
         )
 
         if self._quantize_bits == 4:
-            from diffusers import FluxTransformer2DModel
+            from diffusers import Flux2Transformer2DModel
             from transformers import BitsAndBytesConfig
 
             bnb_cfg = BitsAndBytesConfig(
@@ -83,13 +86,13 @@ class FluxDiffusersTarget:
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch.bfloat16,
             )
-            transformer = FluxTransformer2DModel.from_pretrained(
+            transformer = Flux2Transformer2DModel.from_pretrained(
                 _MODEL_ID,
                 subfolder="transformer",
                 quantization_config=bnb_cfg,
                 torch_dtype=torch.bfloat16,
             )
-            self._pipe = FluxPipeline.from_pretrained(
+            self._pipe = Flux2KleinPipeline.from_pretrained(
                 _MODEL_ID,
                 transformer=transformer,
                 torch_dtype=torch.bfloat16,
@@ -97,17 +100,17 @@ class FluxDiffusersTarget:
             self._pipe.enable_model_cpu_offload()
 
         elif self._quantize_bits == 8:
-            from diffusers import FluxTransformer2DModel
+            from diffusers import Flux2Transformer2DModel
             from transformers import BitsAndBytesConfig
 
             bnb_cfg = BitsAndBytesConfig(load_in_8bit=True)
-            transformer = FluxTransformer2DModel.from_pretrained(
+            transformer = Flux2Transformer2DModel.from_pretrained(
                 _MODEL_ID,
                 subfolder="transformer",
                 quantization_config=bnb_cfg,
                 torch_dtype=torch.bfloat16,
             )
-            self._pipe = FluxPipeline.from_pretrained(
+            self._pipe = Flux2KleinPipeline.from_pretrained(
                 _MODEL_ID,
                 transformer=transformer,
                 torch_dtype=torch.bfloat16,
@@ -116,7 +119,7 @@ class FluxDiffusersTarget:
 
         else:
             # Full bfloat16 (~11 GB VRAM for 4B klein model)
-            self._pipe = FluxPipeline.from_pretrained(
+            self._pipe = Flux2KleinPipeline.from_pretrained(
                 _MODEL_ID,
                 torch_dtype=torch.bfloat16,
             ).to("cuda")
@@ -149,8 +152,7 @@ class FluxDiffusersTarget:
                     width=self._width,
                     height=self._height,
                     generator=generator,
-                    guidance_scale=0.0,   # schnell is guidance-free
-                    max_sequence_length=256,
+                    guidance_scale=1.0,   # klein-4B is guidance-distilled (steps=4, gs=1.0)
                 )
                 buf = io.BytesIO()
                 output.images[0].save(buf, format="PNG")
