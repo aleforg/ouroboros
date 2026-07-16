@@ -31,7 +31,7 @@ async def run_replay(past_run_dir: Path, output_dir: Path) -> None:
         flux_steps=cfg_dict.get("flux_steps", 4),
         flux_width=cfg_dict.get("flux_width", 512),
         flux_height=cfg_dict.get("flux_height", 512),
-        judge_backend=cfg_dict.get("judge_backend", "gemini"),
+        judge_backend=cfg_dict.get("judge_backend", "mlx"),
         judge_model=cfg_dict.get("judge_model", ""),
         max_t2i_calls=cfg_dict.get("max_t2i_calls", 200),
         rate_limit_per_min=cfg_dict.get("rate_limit_per_min", 60),

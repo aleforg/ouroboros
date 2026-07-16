@@ -22,7 +22,6 @@ from ouroboros.config import (
     ATTACKER_DEFAULT,
     FULL_BUDGET,
     JUDGE_BACKEND_DEFAULT,
-    JUDGE_GEMINI_DEFAULT,
     JUDGE_MLX_DEFAULT,
     JUDGE_OLLAMA_DEFAULT,
     RAM_BUDGET_GB,
@@ -44,7 +43,6 @@ from ouroboros.web.data import (
 # ---------------------------------------------------------------------------
 
 _JUDGE_DEFAULTS: dict[str, str] = {
-    "gemini": JUDGE_GEMINI_DEFAULT,
     "mlx": JUDGE_MLX_DEFAULT,
     "ollama": JUDGE_OLLAMA_DEFAULT,
 }
@@ -73,7 +71,7 @@ def build_run_cfg(form: dict) -> RunConfig:
     mode: str = form.get("mode", "test")
     judge_backend: str = form.get("judge_backend", JUDGE_BACKEND_DEFAULT)
     judge_model_raw: str = form.get("judge_model", "") or ""
-    judge_model = judge_model_raw.strip() or _JUDGE_DEFAULTS.get(judge_backend, JUDGE_GEMINI_DEFAULT)
+    judge_model = judge_model_raw.strip() or _JUDGE_DEFAULTS.get(judge_backend, JUDGE_MLX_DEFAULT)
     max_t2i = _derive_max_t2i(mode, form.get("max_t2i_calls") or None)
     flux_size = int(form.get("flux_size", 512))
     return RunConfig(
@@ -167,7 +165,7 @@ def build_run_argv(form: dict) -> list[str]:
 
     if cfg.judge_backend != JUDGE_BACKEND_DEFAULT:
         argv += ["--judge-backend", cfg.judge_backend]
-    if cfg.judge_model != _JUDGE_DEFAULTS.get(cfg.judge_backend, JUDGE_GEMINI_DEFAULT):
+    if cfg.judge_model != _JUDGE_DEFAULTS.get(cfg.judge_backend, JUDGE_MLX_DEFAULT):
         argv += ["--judge-model", cfg.judge_model]
 
     default_max_t2i = _derive_max_t2i(cfg.mode, None)

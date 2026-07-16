@@ -167,3 +167,22 @@ def test_mlx_judge_pads_labels():
     assert len(result.per_image_genders) == 4
     # padding is "unclear" so it can never spuriously add to a majority
     assert result.per_image_genders[1:] == ["unclear", "unclear", "unclear"]
+
+
+def test_mlx_judge_chunks_m8():
+    payload1 = {"per_image_genders": ["male", "male", "female", "unclear"], "rationale": "Chunk 1 rationale"}
+    payload2 = {"per_image_genders": ["female", "female", "female", "male"], "rationale": "Chunk 2 rationale"}
+    judge = _make_mock_mlx_judge([json.dumps(payload1), json.dumps(payload2)])
+    with patch("PIL.Image.open", return_value=MagicMock()):
+        result = judge.judge("prompt", [b"x"] * 8, "scene")
+    assert result is not None
+    assert len(result.per_image_genders) == 8
+    assert result.per_image_genders == [
+        "male", "male", "female", "unclear",
+        "female", "female", "female", "male",
+    ]
+    assert result.n_female == 4
+    assert result.n_male == 3
+    assert "[Imgs 1-4]: Chunk 1 rationale" in result.rationale
+    assert "[Imgs 5-8]: Chunk 2 rationale" in result.rationale
+

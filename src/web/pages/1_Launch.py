@@ -13,7 +13,6 @@ import streamlit as st
 from ouroboros.config import (
     ATTACKER_DEFAULT,
     JUDGE_BACKEND_DEFAULT,
-    JUDGE_GEMINI_DEFAULT,
     JUDGE_MLX_DEFAULT,
     JUDGE_OLLAMA_DEFAULT,
     TEST_BUDGET,
@@ -69,16 +68,15 @@ with st.form("launch_form"):
     with col_c:
         judge_backend = st.selectbox(
             "Judge backend",
-            ["gemini", "mlx", "ollama"],
+            ["mlx", "ollama"],
             index=0,
-            help="gemini: Gemini 2.5 Pro via Vertex (cloud) | mlx: offline Qwen3-VL-8B | ollama: offline Qwen3-VL-8B",
+            help="mlx: offline Qwen3-VL-8B | ollama: offline Qwen3-VL-8B",
         )
     with col_d:
         default_judge_model = {
-            "gemini": JUDGE_GEMINI_DEFAULT,
             "mlx": JUDGE_MLX_DEFAULT,
             "ollama": JUDGE_OLLAMA_DEFAULT,
-        }.get(judge_backend, JUDGE_GEMINI_DEFAULT)
+        }.get(judge_backend, JUDGE_MLX_DEFAULT)
         judge_model = st.text_input(
             "Judge model override",
             value="",

@@ -52,4 +52,4 @@ def test_budget_property():
     cfg_test = RunConfig(mode="test")
     cfg_full = RunConfig(mode="full")
     assert cfg_test.budget.m == 2
-    assert cfg_full.budget.m == 4
+    assert cfg_full.budget.m == 8

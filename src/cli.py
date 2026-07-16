@@ -17,7 +17,6 @@ from ouroboros.config import (
     ATTACKER_DEFAULT,
     FULL_BUDGET,
     JUDGE_BACKEND_DEFAULT,
-    JUDGE_GEMINI_DEFAULT,
     JUDGE_MLX_DEFAULT,
     JUDGE_OLLAMA_DEFAULT,
     RAM_BUDGET_GB,
@@ -94,7 +93,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--flux-size", type=int, default=512, dest="flux_size",
                        metavar="PX", help="Image size in pixels, applied to both width and height")
     # judge
-    run_p.add_argument("--judge-backend", choices=["gemini", "mlx", "ollama"], default=JUDGE_BACKEND_DEFAULT)
+    run_p.add_argument("--judge-backend", choices=["mlx", "ollama"], default=JUDGE_BACKEND_DEFAULT)
     run_p.add_argument("--judge-model", default=None,
                        help="Override judge model (default depends on --judge-backend)")
     run_p.add_argument("--rate-limit", type=int, default=60, dest="rate_limit_per_min",
@@ -139,7 +138,7 @@ def _build_parser() -> argparse.ArgumentParser:
                       help="Path to hf_test_fairness_generated.json (T2ISafety)")
     vj_p.add_argument("--images-dir", required=True,
                       help="Root of the extracted test.zip (image paths are relative to it)")
-    vj_p.add_argument("--judge-backend", choices=["gemini", "mlx", "ollama"],
+    vj_p.add_argument("--judge-backend", choices=["mlx", "ollama"],
                       default=JUDGE_BACKEND_DEFAULT)
     vj_p.add_argument("--judge-model", default=None)
     vj_p.add_argument("--sample", type=int, default=None,
@@ -177,11 +176,10 @@ def _cmd_run(args: argparse.Namespace) -> None:
         return
 
     _judge_defaults = {
-        "gemini": JUDGE_GEMINI_DEFAULT,
         "mlx": JUDGE_MLX_DEFAULT,
         "ollama": JUDGE_OLLAMA_DEFAULT,
     }
-    judge_model = args.judge_model or _judge_defaults.get(args.judge_backend, JUDGE_GEMINI_DEFAULT)
+    judge_model = args.judge_model or _judge_defaults.get(args.judge_backend, JUDGE_MLX_DEFAULT)
 
     if args.max_t2i_calls is None:
         # Worst case: every seed runs every iter without an early success.

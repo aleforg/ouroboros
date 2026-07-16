@@ -1,4 +1,4 @@
-"""FLUX.1-schnell via HuggingFace diffusers on NVIDIA CUDA.
+"""FLUX.2-klein-4B via HuggingFace diffusers on NVIDIA CUDA.
 
 Drop-in replacement for FluxLocalTarget on GPU cloud deployments (RunPod,
 Lambda, Colab) where Apple Silicon / mflux is unavailable.
@@ -16,26 +16,26 @@ from ouroboros.targets.base import SampleResult
 
 logger = logging.getLogger(__name__)
 
-_MODEL_ID = "black-forest-labs/FLUX.1-schnell"
+_MODEL_ID = "black-forest-labs/FLUX.2-klein-4B"
 
-# VRAM estimates (transformer + VAE + encoders, rough)
-_VRAM_GB: dict[int, float] = {4: 7.0, 8: 14.0}
-_VRAM_BF16 = 26.0
+# VRAM estimates for FLUX.2-klein-4B (4B weights + VAE + text encoders)
+_VRAM_GB: dict[int, float] = {4: 3.5, 8: 6.5}
+_VRAM_BF16 = 11.0
 
 
 class FluxDiffusersTarget:
-    """FLUX.1-schnell via diffusers + CUDA.
+    """FLUX.2-klein-4B via diffusers + CUDA.
 
     Parameters
     ----------
     steps:
-        Inference steps. 4 is optimal for the schnell distilled model.
+        Inference steps. 4 is optimal for the klein distilled model.
     width / height:
         Output resolution in pixels.
     quantize_bits:
-        4 → 4-bit NF4 (bitsandbytes, ~7 GB VRAM, needs RTX 3090+).
-        8 → 8-bit (bitsandbytes, ~14 GB VRAM).
-        Anything else → bfloat16 full precision (~26 GB VRAM, needs A100/H100).
+        4 → 4-bit NF4 (bitsandbytes, ~3.5 GB VRAM).
+        8 → 8-bit (bitsandbytes, ~6.5 GB VRAM).
+        Anything else → bfloat16 full precision (~11 GB VRAM).
     seed_base:
         Base RNG seed; sample i uses seed_base + i * 1000.
     """
@@ -115,13 +115,13 @@ class FluxDiffusersTarget:
             self._pipe.enable_model_cpu_offload()
 
         else:
-            # Full bfloat16 — use for A100/H100 (>= 40 GB VRAM)
+            # Full bfloat16 (~11 GB VRAM for 4B klein model)
             self._pipe = FluxPipeline.from_pretrained(
                 _MODEL_ID,
                 torch_dtype=torch.bfloat16,
             ).to("cuda")
 
-        logger.info("FLUX.1-schnell loaded.")
+        logger.info("FLUX.2-klein-4B loaded.")
 
     # ------------------------------------------------------------------
     # TargetBackend protocol

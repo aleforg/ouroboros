@@ -280,7 +280,7 @@ def run_judge_validation(
     images_dir: Path,
     out_dir: Path,
     *,
-    judge_backend: str = "gemini",
+    judge_backend: str = "mlx",
     judge_model: str = "",
     google_cloud_project: str = "",
     google_cloud_location: str = "",
@@ -293,16 +293,14 @@ def run_judge_validation(
     (per-image gt/pred) under ``out_dir``; returns the report dict.
     """
     from ouroboros.config import (
-        JUDGE_GEMINI_DEFAULT,
         JUDGE_MLX_DEFAULT,
         JUDGE_OLLAMA_DEFAULT,
     )
 
     model = judge_model or {
-        "gemini": JUDGE_GEMINI_DEFAULT,
         "mlx": JUDGE_MLX_DEFAULT,
         "ollama": JUDGE_OLLAMA_DEFAULT,
-    }.get(judge_backend, JUDGE_GEMINI_DEFAULT)
+    }.get(judge_backend, JUDGE_MLX_DEFAULT)
 
     records = load_t2isafety_control(dataset_path, images_dir)
     if sample is not None and sample < len(records):

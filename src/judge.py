@@ -352,8 +352,26 @@ class MLXJudge:
         self._load()
         from PIL import Image  # type: ignore[import]
 
-        pil_images = [Image.open(BytesIO(b)) for b in images]
         m = len(images)
+        chunk_size = 4
+        if m > chunk_size:
+            all_genders: list[str] = []
+            rationales: list[str] = []
+            for i in range(0, m, chunk_size):
+                chunk_images = images[i : i + chunk_size]
+                chunk_res = self.judge(target_prompt, chunk_images, base_scene)
+                if chunk_res is None:
+                    return None
+                all_genders.extend(chunk_res.per_image_genders)
+                if chunk_res.rationale:
+                    rationales.append(f"[Imgs {i+1}-{i+len(chunk_images)}]: {chunk_res.rationale}")
+            return GenderJudgement(
+                per_image_genders=all_genders,
+                rationale=" | ".join(rationales),
+                judge_id=self.judge_id,
+            )
+
+        pil_images = [Image.open(BytesIO(b)) for b in images]
         user_msg = _build_user_msg(base_scene, target_prompt, m)
 
         prior_error: str | None = None
@@ -437,6 +455,24 @@ class OllamaJudge:
         import ollama  # type: ignore[import]
 
         m = len(images)
+        chunk_size = 4
+        if m > chunk_size:
+            all_genders: list[str] = []
+            rationales: list[str] = []
+            for i in range(0, m, chunk_size):
+                chunk_images = images[i : i + chunk_size]
+                chunk_res = self.judge(target_prompt, chunk_images, base_scene)
+                if chunk_res is None:
+                    return None
+                all_genders.extend(chunk_res.per_image_genders)
+                if chunk_res.rationale:
+                    rationales.append(f"[Imgs {i+1}-{i+len(chunk_images)}]: {chunk_res.rationale}")
+            return GenderJudgement(
+                per_image_genders=all_genders,
+                rationale=" | ".join(rationales),
+                judge_id=self.judge_id,
+            )
+
         b64_images = [base64.b64encode(b).decode() for b in images]
         user_msg = _build_user_msg(base_scene, target_prompt, m)
 
@@ -483,155 +519,18 @@ class OllamaJudge:
         return None
 
 
-# --- Gemini cloud judge -------------------------------------------------------
-
-
-class GeminiJudge:
-    """Judge via Gemini on Vertex AI (cloud, zero local RAM)."""
-
-    def __init__(
-        self,
-        project: str,
-        location: str,
-        model_id: str = "gemini-2.5-pro",
-        judge_id: str = "gemini",
-    ) -> None:
-        import os
-
-        from google import genai
-
-        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
-        self._client = genai.Client(project=project, location=location)
-        self._model_id = model_id
-        self.judge_id = judge_id
-
-    def aclose(self) -> None:
-        return None
-
-    def _safety_settings(self):
-        from google.genai import types
-
-        return [
-            types.SafetySetting(category=cat, threshold="BLOCK_NONE")
-            for cat in (
-                "HARM_CATEGORY_HARASSMENT",
-                "HARM_CATEGORY_HATE_SPEECH",
-                "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "HARM_CATEGORY_DANGEROUS_CONTENT",
-            )
-        ]
-
-    def generate_json(self, system: str, user: str, images: list[bytes]) -> str:
-        from google.genai import types
-
-        parts = [types.Part.from_text(text=f"{system}\n\n{user}")] + [
-            types.Part.from_bytes(data=b, mime_type="image/png") for b in images
-        ]
-        response = self._client.models.generate_content(
-            model=self._model_id,
-            contents=[types.Content(parts=parts, role="user")],
-            config=types.GenerateContentConfig(
-                temperature=JUDGE_TEMPERATURE,
-                max_output_tokens=512,
-                response_mime_type="application/json",
-                safety_settings=self._safety_settings(),
-            ),
-        )
-        return response.text or ""
-
-    def judge(
-        self,
-        target_prompt: str,
-        images: list[bytes],
-        base_scene: str,
-    ) -> GenderJudgement | None:
-        from google.genai import types
-
-        m = len(images)
-        user_msg = _build_user_msg(base_scene, target_prompt, m)
-
-        image_parts = [
-            types.Part.from_bytes(data=img_bytes, mime_type="image/png")
-            for img_bytes in images
-        ]
-        text_part = types.Part.from_text(text=f"{JUDGE_SYSTEM_PROMPT}\n\n{user_msg}")
-        contents = [types.Content(parts=[text_part] + image_parts, role="user")]
-
-        prior_error: str | None = None
-        for attempt in range(JUDGE_MAX_RETRIES + 1):
-            if prior_error:
-                retry_part = types.Part.from_text(
-                    text=f"Your previous response failed schema validation: {prior_error}\nReturn valid JSON only."
-                )
-                call_contents = contents + [
-                    types.Content(parts=[retry_part], role="user")
-                ]
-            else:
-                call_contents = contents
-
-            try:
-                response = self._client.models.generate_content(
-                    model=self._model_id,
-                    contents=call_contents,
-                    config=types.GenerateContentConfig(
-                        temperature=JUDGE_TEMPERATURE,
-                        max_output_tokens=1024,
-                        response_mime_type="application/json",
-                        response_schema=_GenderJudgementRaw,
-                        safety_settings=self._safety_settings(),
-                    ),
-                )
-                raw = response.text or ""
-                if not raw:
-                    # Diagnose why: safety block, MAX_TOKENS truncation, etc.
-                    finish = (
-                        getattr(response.candidates[0], "finish_reason", None)
-                        if response.candidates
-                        else "no_candidates"
-                    )
-                    pf = getattr(response, "prompt_feedback", None)
-                    logger.warning(
-                        "GeminiJudge attempt %d: empty response (finish_reason=%s prompt_feedback=%s)",
-                        attempt + 1,
-                        finish,
-                        pf,
-                    )
-                    prior_error = f"Empty response, finish_reason={finish}"
-                    continue
-            except Exception as exc:
-                logger.warning(
-                    "GeminiJudge API call failed (attempt %d): %s", attempt + 1, exc
-                )
-                prior_error = str(exc)
-                continue
-
-            judgement, prior_error = _parse_and_validate(raw, attempt, m, self.judge_id)
-            if judgement is not None:
-                return judgement
-
-        logger.error("GeminiJudge failed after %d attempts", JUDGE_MAX_RETRIES + 1)
-        return None
-
-
 # --- factory ------------------------------------------------------------------
 
 
 def build_judge(
-    backend: Literal["mlx", "ollama", "gemini"],
+    backend: Literal["mlx", "ollama"],
     model_id: str,
     *,
     project: str = "",
     location: str = "",
     ollama_host: str = "http://localhost:11434",
     judge_id: str = "",
-) -> MLXJudge | OllamaJudge | GeminiJudge:
-    if backend == "gemini":
-        return GeminiJudge(
-            project=project,
-            location=location,
-            model_id=model_id,
-            judge_id=judge_id or "gemini",
-        )
+) -> MLXJudge | OllamaJudge:
     if backend == "mlx":
         return MLXJudge(model_id, judge_id=judge_id or "mlx")
     return OllamaJudge(model_id, host=ollama_host, judge_id=judge_id or "ollama")

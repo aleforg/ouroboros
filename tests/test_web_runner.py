@@ -14,7 +14,6 @@ from ouroboros.config import (
     ATTACKER_DEFAULT,
     FULL_BUDGET,
     JUDGE_BACKEND_DEFAULT,
-    JUDGE_GEMINI_DEFAULT,
     JUDGE_MLX_DEFAULT,
     JUDGE_OLLAMA_DEFAULT,
     RAM_BUDGET_GB,
@@ -31,7 +30,7 @@ class TestBuildRunCfg:
     def _form(self, **overrides) -> dict:
         return {
             "mode": "test",
-            "judge_backend": "gemini",
+            "judge_backend": "mlx",
             "judge_model": "",
             "flux_quantize": 4,
             "flux_steps": 4,
@@ -52,13 +51,12 @@ class TestBuildRunCfg:
         cfg = build_run_cfg(self._form())
         assert isinstance(cfg, RunConfig)
         assert cfg.mode == "test"
-        assert cfg.judge_backend == "gemini"
-        assert cfg.judge_model == JUDGE_GEMINI_DEFAULT
+        assert cfg.judge_backend == "mlx"
+        assert cfg.judge_model == JUDGE_MLX_DEFAULT
 
     def test_judge_model_default_by_backend(self):
         from ouroboros.web.runner import build_run_cfg
         for backend, expected in [
-            ("gemini", JUDGE_GEMINI_DEFAULT),
             ("mlx",    JUDGE_MLX_DEFAULT),
             ("ollama", JUDGE_OLLAMA_DEFAULT),
         ]:
@@ -108,7 +106,7 @@ class TestBuildRunArgv:
     def _form(self, **overrides) -> dict:
         return {
             "mode": "test",
-            "judge_backend": "gemini",
+            "judge_backend": "mlx",
             "judge_model": "",
             "flux_quantize": 4,
             "flux_steps": 4,
@@ -198,7 +196,7 @@ class TestConfigHashConsistency:
         from ouroboros.web.runner import build_run_cfg
         form = {
             "mode": "test",
-            "judge_backend": "gemini",
+            "judge_backend": "mlx",
             "judge_model": "",
             "flux_quantize": 4,
             "flux_steps": 4,
@@ -219,7 +217,7 @@ class TestConfigHashConsistency:
     def test_different_modes_produce_different_hashes(self):
         from ouroboros.web.runner import build_run_cfg
         base = {
-            "judge_backend": "gemini", "judge_model": "",
+            "judge_backend": "mlx", "judge_model": "",
             "flux_quantize": 4, "flux_steps": 4, "flux_size": 512,
             "attacker_model": ATTACKER_DEFAULT, "rate_limit_per_min": 60,
             "max_t2i_calls": None, "allow_swap": False, "no_aggressive_unload": False,
@@ -239,7 +237,7 @@ class TestPreflightRam:
         from ouroboros.web.runner import preflight_ram
         ok, msg = preflight_ram({
             "mode": "test",
-            "judge_backend": "gemini", "judge_model": "",
+            "judge_backend": "mlx", "judge_model": "",
             "flux_quantize": 4, "flux_steps": 4, "flux_size": 512,
             "attacker_model": ATTACKER_DEFAULT, "rate_limit_per_min": 60,
             "max_t2i_calls": None, "allow_swap": False, "no_aggressive_unload": False,
@@ -253,7 +251,7 @@ class TestPreflightRam:
         # flux_quantize=8 → target=8 GB; dolphin-llama3=5 GB; sum=13 GB = budget → borderline
         ok, msg = preflight_ram({
             "mode": "test",
-            "judge_backend": "gemini", "judge_model": "",
+            "judge_backend": "mlx", "judge_model": "",
             "flux_quantize": 8, "flux_steps": 4, "flux_size": 512,
             "attacker_model": ATTACKER_DEFAULT, "rate_limit_per_min": 60,
             "max_t2i_calls": None, "allow_swap": False,
