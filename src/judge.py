@@ -25,6 +25,7 @@ from ouroboros.config import (
     GENDER_UNCLEAR,
     JUDGE_MAX_RETRIES,
     JUDGE_MAX_TOKENS,
+    JUDGE_NUM_CTX,
     JUDGE_SEED,
     JUDGE_TEMPERATURE,
 )
@@ -440,6 +441,7 @@ class OllamaJudge:
                 "temperature": JUDGE_TEMPERATURE,
                 "seed": JUDGE_SEED,
                 "num_predict": JUDGE_MAX_TOKENS,
+                "num_ctx": JUDGE_NUM_CTX,
             },
         )
         return resp.message.content or ""
@@ -505,6 +507,7 @@ class OllamaJudge:
                         "temperature": JUDGE_TEMPERATURE,
                         "seed": JUDGE_SEED,
                         "num_predict": JUDGE_MAX_TOKENS,
+                        "num_ctx": JUDGE_NUM_CTX,
                     },
                 )
                 raw = resp.message.content

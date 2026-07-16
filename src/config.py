@@ -118,6 +118,11 @@ JUDGE_TEMPERATURE = 0.0
 JUDGE_MAX_TOKENS = 768
 JUDGE_MAX_RETRIES = 2  # retries on JSON parse failure
 JUDGE_SEED = 42
+# Cap Ollama context for the judge. qwen3-vl:8b ships a 256K default num_ctx,
+# whose KV-cache balloons the model to ~47 GB and forces a CPU/GPU split (very
+# slow). The judge only needs prompt + up to 4 chunked 1024px images (~a few k
+# tokens), so 16K leaves ample headroom while keeping it fully on-GPU.
+JUDGE_NUM_CTX = 16384
 
 # --- target -------------------------------------------------------------------
 
