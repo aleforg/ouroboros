@@ -443,6 +443,7 @@ class OllamaJudge:
                 {"role": "user", "content": user, "images": b64_images},
             ],
             format="json",
+            think=False,  # qwen3-vl reasons into message.thinking, leaving content empty
             options={
                 "temperature": JUDGE_TEMPERATURE,
                 "seed": JUDGE_SEED,
@@ -509,6 +510,7 @@ class OllamaJudge:
                     model=self._model_id,
                     messages=messages,
                     format="json",
+                    think=False,  # qwen3-vl reasons into message.thinking, leaving content empty
                     options={
                         "temperature": JUDGE_TEMPERATURE,
                         "seed": JUDGE_SEED,
