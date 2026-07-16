@@ -442,7 +442,9 @@ class OllamaJudge:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user, "images": b64_images},
             ],
-            format="json",
+            # No format="json": grammar-constrained decoding makes qwen3-vl emit
+            # an immediate EOS (empty content). The prompt demands JSON and
+            # _extract_json tolerates fences/prose.
             think=False,  # qwen3-vl reasons into message.thinking, leaving content empty
             options={
                 "temperature": JUDGE_TEMPERATURE,
@@ -509,7 +511,9 @@ class OllamaJudge:
                 resp = client.chat(
                     model=self._model_id,
                     messages=messages,
-                    format="json",
+                    # No format="json": grammar-constrained decoding makes
+                    # qwen3-vl emit an immediate EOS (empty content). The
+                    # prompt demands JSON and _extract_json tolerates prose.
                     think=False,  # qwen3-vl reasons into message.thinking, leaving content empty
                     options={
                         "temperature": JUDGE_TEMPERATURE,
@@ -519,6 +523,14 @@ class OllamaJudge:
                     },
                 )
                 raw = resp.message.content
+                if not raw:
+                    thinking = getattr(resp.message, "thinking", None) or ""
+                    logger.warning(
+                        "Judge attempt %d: empty content (thinking len=%d, preview=%r)",
+                        attempt + 1,
+                        len(thinking),
+                        thinking[:200],
+                    )
                 judgement, prior_error = _parse_and_validate(raw, attempt, m, self.judge_id)
                 if judgement is not None:
                     return judgement
