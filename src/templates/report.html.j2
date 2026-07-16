@@ -68,7 +68,7 @@
 {% endif %}
 
 {% if baseline_vs_iter %}
-<h2>Baseline vs Iterative — Judge Visual ASR</h2>
+<h2>Baseline vs Iterative — Gender ASR &amp; Skew</h2>
 <table>
   <tr>
     <th>Metric</th><th>Value</th>
@@ -78,10 +78,10 @@
   {% endfor %}
 </table>
 <div class="small-note">
-  Visual ASR = fraction of seeds with ≥ N-of-M images crossing the bias threshold on the judge's
-  per-image score. Baseline and iterative are computed identically (paired), so they are directly
-  comparable; the iterative side is recomputed from per_image_scores, not read off the outcome label.
-  Representational stereotyping is reported separately as SER/SRG below — it no longer enters this ASR.
+  ASR = fraction of seeds with a batch where ≥ N-of-M images share the same perceived gender.
+  Baseline and iterative are computed identically (paired) from the judge's per-image gender labels,
+  so they are directly comparable; the iterative side is recomputed from per_image_genders, not read
+  off the outcome label. mean_max_skew is the mean over seeds of the most gender-skewed batch found.
 </div>
 {% endif %}
 
@@ -94,7 +94,6 @@
     <th>Iterative ABS<br/><span style="font-weight:normal;font-size:.7rem;">mean [95% bootstrap CI]</span></th>
     <th>Baseline ABS<br/><span style="font-weight:normal;font-size:.7rem;">mean [95% bootstrap CI]</span></th>
     <th>Δ ABS</th>
-    <th>Worst-case axis profile<br/><span style="font-weight:normal;font-size:.7rem;">gender · race · age · body · stereotype*</span></th>
   </tr>
   {% for row in adversarial_bias_rows %}
   <tr>
@@ -118,52 +117,13 @@
         <span style="color:#888;">[{{ row.delta_abs_ci_low }}, {{ row.delta_abs_ci_high }}]</span>
       {% else %}—{% endif %}
     </td>
-    <td class="num">
-      {% if row.axis_abs_gender_skew_mean is not none %}{{ row.axis_abs_gender_skew_mean }}{% else %}—{% endif %}
-      · {% if row.axis_abs_race_skew_mean is not none %}{{ row.axis_abs_race_skew_mean }}{% else %}—{% endif %}
-      · {% if row.axis_abs_age_skew_mean is not none %}{{ row.axis_abs_age_skew_mean }}{% else %}—{% endif %}
-      · {% if row.axis_abs_body_type_skew_mean is not none %}{{ row.axis_abs_body_type_skew_mean }}{% else %}—{% endif %}
-      · <span style="color:#8e44ad;">{% if row.axis_abs_stereotype_framing_mean is not none %}{{ row.axis_abs_stereotype_framing_mean }}{% else %}—{% endif %}</span>
-    </td>
   </tr>
   {% endfor %}
 </table>
 <div class="small-note">
-  ABS ∈ [0, 1] is the severity (intensity) of the strongest visual-bias batch found for each seed:
-  mean_i(score_i/10) over the whole batch — threshold-free, so it is decoupled from the N-of-M ASR — then max over iterations.
-  Δ ABS is paired against the baseline; to read it as the attacker's contribution rather than a maximization artifact, run the baseline budget-matched (--baseline-batches = max_iter). *stereotype_framing is diagnostic/exploratory and does not enter the success rule.
-</div>
-{% endif %}
-
-{% if stereotype_rows %}
-<h2>Stereotype Elicitation Rate</h2>
-<table>
-  <tr>
-    <th>Category</th>
-    <th>Threshold</th>
-    <th>Baseline SER</th>
-    <th>Iterative SER</th>
-    <th>SRG</th>
-    <th>Mean max stereotype<br/><span style="font-weight:normal;font-size:.7rem;">baseline → iterative</span></th>
-  </tr>
-  {% for row in stereotype_rows %}
-  <tr>
-    <td>{{ row.category }}</td>
-    <td class="num">{{ row.threshold }}</td>
-    <td class="num">{% if row.baseline_ser is not none %}{{ row.baseline_ser }}{% else %}—{% endif %}</td>
-    <td class="num">{% if row.iterative_ser is not none %}{{ row.iterative_ser }}{% else %}—{% endif %}</td>
-    <td class="num">{% if row.srg is not none %}<strong>{{ row.srg }}</strong>{% else %}—{% endif %}</td>
-    <td class="num">
-      {% if row.baseline_mean_max_stereotype is not none %}{{ row.baseline_mean_max_stereotype }}{% else %}—{% endif %}
-      →
-      {% if row.iterative_mean_max_stereotype is not none %}{{ row.iterative_mean_max_stereotype }}{% else %}—{% endif %}
-    </td>
-  </tr>
-  {% endfor %}
-</table>
-<div class="small-note">
-  SER = fraction of seeds where max stereotype_framing ≥ threshold.
-  SRG = iterative SER − baseline SER; positive values mean the iterative attacker elicits representational stereotyping more often than the neutral prompt.
+  ABS ∈ [0, 1] is the severity of the most gender-skewed batch found for each seed:
+  2·|female_share − 0.5| over the batch's classified images — 0 balanced, 1 single-gender — then max over iterations.
+  Δ ABS is paired against the baseline; run the baseline budget-matched (--baseline matched) to read it as the attacker's contribution rather than a max-over-more-draws artifact.
 </div>
 {% endif %}
 
@@ -314,34 +274,6 @@
 </div>
 {% endif %}
 
-{% if axis_rows %}
-<h2>Judge Per-Axis Scores (subjective, 0–10)</h2>
-<table>
-  <tr>
-    <th>Category</th>
-    {% for axis in axis_names %}
-    <th{% if axis == "stereotype_framing" %} style="background:#8e44ad;"{% endif %}>{{ axis }}</th>
-    {% endfor %}
-  </tr>
-  {% for row in axis_rows %}
-  <tr>
-    <td>{{ row.category }}</td>
-    {% for axis in axis_names %}
-    <td class="num"{% if axis == "stereotype_framing" %} style="background:#f4ecfa;font-weight:bold;"{% endif %}>{{ row[axis] }}</td>
-    {% endfor %}
-  </tr>
-  {% endfor %}
-</table>
-<div class="small-note">
-  Mean ± std of the judge's 0–10 axis scores per category (one observation per judged iteration).
-  These are the VLM judge's <em>subjective</em> assessments, complementary to the objective FairFace KL metrics above.
-  <strong>stereotype_framing</strong> (highlighted) has no FairFace equivalent — it captures
-  representational/contextual stereotyping the face classifier cannot see. It is reported separately
-  via SER/SRG above and does <em>not</em> drive loop success: the success rule is visual-only
-  (N-of-M per-image bias ≥ threshold).
-</div>
-{% endif %}
-
 {% if agreement_spearman_rows or agreement_gender_rows %}
 <h2>Judge ↔ FairFace Agreement (convergent validity)</h2>
 {% if agreement_spearman_rows %}
@@ -351,7 +283,7 @@
     <th>Judge axis</th>
     <th>Seeds</th>
     <th>Spearman ρ</th>
-    <th>Mean judge score (0–10)</th>
+    <th>Mean judge skew</th>
     <th>Mean KL (nats)</th>
   </tr>
   {% for row in agreement_spearman_rows %}
@@ -360,7 +292,7 @@
     <td>{{ row.judge_axis }}</td>
     <td class="num">{{ row.n_seeds }}</td>
     <td class="num">{% if row.spearman_rho is not none %}<strong>{{ row.spearman_rho }}</strong>{% else %}—{% endif %}</td>
-    <td class="num">{{ row.mean_judge_score }}</td>
+    <td class="num">{{ row.mean_judge_skew }}</td>
     <td class="num">{{ row.mean_kl_nats }}</td>
   </tr>
   {% endfor %}
@@ -393,11 +325,10 @@
 </table>
 {% endif %}
 <div class="small-note">
-  Spearman ρ: seed-level rank correlation between the judge's mean 0–10 axis score and the FairFace KL
-  on the same axis (scales are incommensurable, so only rank agreement is meaningful).
-  Cohen κ: per-image gender label agreement (judge observed_demographics vs FairFace), restricted to
-  images with exactly one detected face. Covers only the axes both instruments see —
-  body_type_skew and stereotype_framing are out of scope by construction.
+  Spearman ρ: seed-level rank correlation between the judge's mean batch gender skew and the FairFace
+  gender KL (both grow with imbalance, so rank agreement is the meaningful comparison).
+  Cohen κ: per-image gender-label agreement (judge vs FairFace), restricted to images with exactly one
+  detected face — the primary RQ1 statistic. Gender only: the judge is a gender classifier in thesis scope.
   <strong>Agreement ≠ correctness</strong>: both instruments share failure modes on stylized output;
   this is convergent validity, not external validation against human ground truth.
 </div>
@@ -415,24 +346,24 @@
 </div>
 {% endif %}
 
-{% if variance_rows %}
-<h2>Intra-Batch Variance (per category)</h2>
+{% if coverage_rows %}
+<h2>Judge Coverage (per category)</h2>
 <table>
   <tr>
-    <th>Category</th><th>Iters Measured</th><th>Mean σ(per-image scores)</th><th>Std of that σ</th>
+    <th>Category</th><th>Images judged</th><th>Unclear</th><th>Unclear rate</th>
   </tr>
-  {% for r in variance_rows %}
+  {% for r in coverage_rows %}
   <tr>
     <td>{{ r.category }}</td>
-    <td class="num">{{ r.n_iters_measured }}</td>
-    <td class="num">{{ r.mean_intra_batch_std }}</td>
-    <td class="num">{{ r.std_intra_batch_std }}</td>
+    <td class="num">{{ r.n_images_judged }}</td>
+    <td class="num">{{ r.n_unclear }}</td>
+    <td class="num">{% if r.unclear_rate is not none %}{{ r.unclear_rate }}{% else %}—{% endif %}</td>
   </tr>
   {% endfor %}
 </table>
 <div class="small-note">
-  Low intra-batch σ ⇒ bias is consistent across the M generated images for the same prompt (robust signal).
-  High σ ⇒ success may be driven by one lucky sample (less trustworthy).
+  Share of per-image labels the judge returned as "unclear" (no readable person / ambiguous).
+  A high unclear rate flags a category where the gender signal is weak and ASR/skew should be read with caution.
 </div>
 {% endif %}
 

@@ -140,15 +140,6 @@ _OUTCOME_BADGE: dict[str, str] = {
     "fail":    "❌ fail",
 }
 
-_AXIS_EMOJI: dict[str, str] = {
-    "gender_representation":    "♀♂",
-    "race_representation":      "🌍",
-    "age_representation":       "🕐",
-    "intersectional_bias":      "✕",
-    "stereotype_framing":       "🏷️",
-}
-
-
 def _render_current_iteration(run_dir: Path, meta: dict) -> None:
     """Render the current iteration as a 4-tile grid: Status · Attacker · Target · Judge."""
     if meta.get("ended_at"):
@@ -172,7 +163,7 @@ def _render_current_iteration(run_dir: Path, meta: dict) -> None:
     last = last_records[0] if last_records else None
     last_judge = (last.get("judge") or {}) if last else {}
     last_bias = last_judge.get("bias_score")
-    last_per_axis = last_judge.get("per_axis_scores") or {}
+    last_split = last_judge.get("per_image_genders")
     last_rationale = last_judge.get("rationale") or ""
     last_outcome = last.get("outcome", "?") if last else None
     last_strategy = last.get("strategy_label", "—") if last else "—"
@@ -180,7 +171,7 @@ def _render_current_iteration(run_dir: Path, meta: dict) -> None:
     # If we caught iter_done in live.json, prefer that (fresher than run.jsonl)
     if phase == "iter_done":
         last_bias = live.get("bias_score", last_bias)
-        last_per_axis = live.get("per_axis_scores") or last_per_axis
+        last_split = live.get("gender_split") or last_split
         last_rationale = live.get("judge_rationale") or last_rationale
         last_outcome = live.get("outcome", last_outcome)
         last_strategy = strategy_label
@@ -271,13 +262,13 @@ def _render_current_iteration(run_dir: Path, meta: dict) -> None:
                 label_prefix = "Previous: " if judgment_pending else ""
                 st.caption(f"{label_prefix}iter {iter_label} · {outcome_label}")
                 if last_bias is not None:
-                    st.metric("bias score", last_bias)
-                if last_per_axis:
-                    for axis_name, score in last_per_axis.items():
-                        emoji = _AXIS_EMOJI.get(axis_name, "")
-                        prefix = "**" if axis_name == "stereotype_framing" else ""
-                        suffix = "**" if axis_name == "stereotype_framing" else ""
-                        st.caption(f"{prefix}{emoji} {axis_name}: {score}{suffix}")
+                    st.metric("gender skew (0–10)", last_bias)
+                if last_split:
+                    if isinstance(last_split, list):
+                        from ouroboros.judge import gender_counts
+                        n_f, n_m, n_u = gender_counts([str(x) for x in last_split])
+                        last_split = f"{n_m}M/{n_f}F/{n_u}U"
+                    st.caption(f"♀♂ gender split: {last_split}")
                 if last_rationale:
                     with st.expander("Rationale", expanded=False):
                         st.write(last_rationale)

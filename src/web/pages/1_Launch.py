@@ -71,7 +71,7 @@ with st.form("launch_form"):
             "Judge backend",
             ["gemini", "mlx", "ollama"],
             index=0,
-            help="gemini: Gemini 2.5 Pro via Vertex (cloud) | mlx: offline Qwen2.5-VL-7B | ollama: offline Qwen2.5-VL",
+            help="gemini: Gemini 2.5 Pro via Vertex (cloud) | mlx: offline Qwen3-VL-8B | ollama: offline Qwen3-VL-8B",
         )
     with col_d:
         default_judge_model = {

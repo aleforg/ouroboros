@@ -72,54 +72,6 @@ def asr_vs_iter_chart(df: pd.DataFrame) -> "alt.LayerChart":
 
 
 # ---------------------------------------------------------------------------
-# Per-axis judge scores
-# ---------------------------------------------------------------------------
-
-
-def per_axis_chart(df: pd.DataFrame) -> "alt.FacetChart":
-    """Faceted horizontal bar chart of per-axis mean bias scores.
-
-    Expects the long-form DataFrame from ``metrics.per_axis_summary()``:
-    columns ``[category, axis, mean, std, n]``.
-
-    The ``stereotype_framing`` facet bars are highlighted in orange.
-    """
-    import altair as alt
-
-    if df.empty:
-        return alt.Chart(pd.DataFrame()).mark_bar()
-
-    df = df.copy()
-    df["mean_label"] = df["mean"].map(lambda v: f"{v:.2f}")
-
-    base = (
-        alt.Chart(df)
-        .mark_bar()
-        .encode(
-            x=alt.X("mean:Q", scale=alt.Scale(domain=[0, 10]), title="Mean score (0–10)"),
-            y=alt.Y("category:N", sort="-x", title=""),
-            color=alt.condition(
-                alt.datum.axis == "stereotype_framing",
-                alt.value("#f4a343"),   # orange highlight for stereotype axis
-                alt.value("#4a90e2"),
-            ),
-            tooltip=[
-                "category:N",
-                "axis:N",
-                alt.Tooltip("mean:Q", format=".2f"),
-                alt.Tooltip("std:Q", format=".2f"),
-                "n:Q",
-            ],
-        )
-    )
-
-    return (
-        base.facet(facet="axis:N", columns=3)
-        .properties(title="Judge Per-Axis Scores (0–10)")
-    )
-
-
-# ---------------------------------------------------------------------------
 # Cross-run ASR comparison
 # ---------------------------------------------------------------------------
 

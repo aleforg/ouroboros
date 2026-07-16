@@ -7,18 +7,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 from ouroboros import __version__
-from ouroboros.config import JUDGE_AXES, LABEL_SUCCESS
+from ouroboros.config import LABEL_SUCCESS
 from ouroboros.metrics import (
     aggregate_runs,
     asr_vs_iter,
     baseline_vs_iterative,
-    intra_batch_variance,
+    censorship_summary,
+    judge_coverage,
     load_baseline,
     load_run,
-    per_axis_summary,
     per_category,
-    stereotype_elicitation_summary,
     summary_per_seed,
 )
 from ouroboros.metrics.agreement import (
@@ -133,35 +133,11 @@ def _svg_asr_curves(asr_df, width: int = 720, height: int = 320) -> str:
 # --- per-run report -----------------------------------------------------------
 
 
-def _pivot_axis_summary(axis_df) -> tuple[list[str], list[dict]]:
-    """Pivot long-form per_axis_summary into (axis_names, per-category rows).
+def _success_n_of_m(run_dir: Path) -> int:
+    """Read success_n_of_m for the run from meta.json.
 
-    Each row: {"category": cat, "<axis>": "mean ± std", ...}. Returns ([], [])
-    when there is nothing to show, so the template section is skipped.
-    """
-    if axis_df is None or axis_df.empty:
-        return [], []
-    axis_names = [a for a in JUDGE_AXES if a in set(axis_df["axis"])]
-    rows: list[dict] = []
-    for cat, grp in axis_df.groupby("category"):
-        row: dict = {"category": cat}
-        by_axis = {r["axis"]: r for r in grp.to_dict("records")}
-        for axis in axis_names:
-            rec = by_axis.get(axis)
-            if rec is None or rec.get("mean") is None:
-                row[axis] = "—"
-            else:
-                row[axis] = f"{rec['mean']} ± {rec['std']}"
-        rows.append(row)
-    return axis_names, rows
-
-
-def _success_params(run_dir: Path) -> tuple[int, int]:
-    """Read (bias_threshold, success_n_of_m) for the run from meta.json.
-
-    Resolves the frozen ModeBudget via the run's mode. Falls back to the
-    historical defaults (bias_threshold=7, success_n_of_m=2) when meta is
-    missing or unreadable, so old runs still re-score sensibly.
+    Resolves the frozen ModeBudget via the run's mode. Falls back to 2 when meta
+    is missing or unreadable, so old runs still re-score sensibly.
     """
     from ouroboros.config import FULL_BUDGET, TEST_BUDGET
 
@@ -170,9 +146,9 @@ def _success_params(run_dir: Path) -> tuple[int, int]:
         meta = json.loads(meta_path.read_text())
         mode = (meta.get("config") or {}).get("mode", "test")
         budget = TEST_BUDGET if mode == "test" else FULL_BUDGET
-        return budget.bias_threshold, budget.success_n_of_m
+        return budget.success_n_of_m
     except Exception:
-        return 7, 2
+        return 2
 
 
 def _terminal_run_subset(run_df) -> "pd.DataFrame":
@@ -306,7 +282,7 @@ def _run_fairface_pipeline(run_dir: Path, run_df, baseline_df):
     return empty, empty, empty, empty
 
 
-def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
+def run_report(run_dir: Path, skip_fairface: bool = False, bls: bool = False) -> None:
     """Generate post-hoc report artifacts under run_dir/report/."""
     report_dir = run_dir / "report"
     report_dir.mkdir(exist_ok=True)
@@ -323,21 +299,26 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
 
     summary_df = summary_per_seed(run_df)
     cat_df = per_category(run_df)
-    axis_df = per_axis_summary(run_df) if not run_df.empty else None
-    # Read the success-rule parameters from the frozen budget in meta.json so the
-    # visual ASR is recomputed at the same threshold/N-of-M the run used. Falls
-    # back to the historical defaults (2-of-M at 7) when meta is unavailable.
-    bias_threshold, success_n_of_m = _success_params(run_dir)
-    bvi = baseline_vs_iterative(
-        baseline_df, run_df, bias_threshold=bias_threshold, success_n_of_m=success_n_of_m
-    )
-    abs_seed_df = adversarial_bias_per_seed(
-        run_df, baseline_df, bias_threshold=bias_threshold
-    )
+    # Censoring diagnostics for the ASR denominator: seeds whose iterations were
+    # all measurement failures are excluded from S', so the rate at which that
+    # happens is reported alongside ASR rather than silently folded into it.
+    censoring = censorship_summary(run_df)
+    if censoring["n_seeds_censored"]:
+        logger.warning(
+            "%d/%d seeds censored from ASR denominator (all iterations were "
+            "measurement failures): %s",
+            censoring["n_seeds_censored"],
+            censoring["n_seeds_total"],
+            ", ".join(censoring["censored_seed_ids"][:5]),
+        )
+    # Read the success N-of-M from the frozen budget in meta.json so ASR is
+    # recomputed at the same quorum the run used (fallback 2 when unavailable).
+    success_n_of_m = _success_n_of_m(run_dir)
+    bvi = baseline_vs_iterative(baseline_df, run_df, success_n_of_m=success_n_of_m)
+    abs_seed_df = adversarial_bias_per_seed(run_df, baseline_df)
     abs_cat_df = adversarial_bias_by_category(abs_seed_df)
-    stereotype_df = stereotype_elicitation_summary(baseline_df, run_df)
     asr_iter_df = asr_vs_iter(run_df) if not run_df.empty else None
-    variance_df = intra_batch_variance(run_df) if not run_df.empty else None
+    coverage_df = judge_coverage(run_df) if not run_df.empty else None
 
     fairface_df = None
     baseline_kl_df = None
@@ -371,13 +352,16 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         # Convergent-validity metrics use the all-iterations face table (broad
         # coverage), independent of the terminal KL table.
         if fairface_raw_df is not None and not fairface_raw_df.empty:
-            try:
-                bls_alignment_df = bls_gender_alignment_summary(fairface_raw_df)
-                if not bls_alignment_df.empty:
-                    bls_alignment_df.to_csv(report_dir / "bls_gender_alignment.csv", index=False)
-                    logger.info("  bls_gender_alignment.csv        → %d rows", len(bls_alignment_df))
-            except Exception as exc:
-                logger.warning("BLS gender alignment failed: %s — skipping", exc)
+            if bls:
+                # BLS occupational alignment (external-validity / RQ2) is an
+                # exploratory extension in thesis scope — opt-in via --bls.
+                try:
+                    bls_alignment_df = bls_gender_alignment_summary(fairface_raw_df)
+                    if not bls_alignment_df.empty:
+                        bls_alignment_df.to_csv(report_dir / "bls_gender_alignment.csv", index=False)
+                        logger.info("  bls_gender_alignment.csv        → %d rows", len(bls_alignment_df))
+                except Exception as exc:
+                    logger.warning("BLS gender alignment failed: %s — skipping", exc)
             try:
                 agreement_spearman_df = judge_fairface_axis_spearman(run_df, fairface_raw_df)
                 if not agreement_spearman_df.empty:
@@ -411,18 +395,18 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         summary_df.to_csv(report_dir / "summary.csv", index=False)
     if not cat_df.empty:
         cat_df.to_csv(report_dir / "per_category.csv", index=False)
-    if axis_df is not None and not axis_df.empty:
-        axis_df.to_csv(report_dir / "per_axis.csv", index=False)
-    if not stereotype_df.empty:
-        stereotype_df.to_csv(report_dir / "stereotype_elicitation.csv", index=False)
+    if not run_df.empty:
+        pd.DataFrame(
+            [{k: v for k, v in censoring.items() if k != "censored_seed_ids"}]
+        ).to_csv(report_dir / "censorship.csv", index=False)
     if not abs_seed_df.empty:
         abs_seed_df.to_csv(report_dir / "adversarial_bias_per_seed.csv", index=False)
     if not abs_cat_df.empty:
         abs_cat_df.to_csv(report_dir / "adversarial_bias_by_category.csv", index=False)
     if asr_iter_df is not None and not asr_iter_df.empty:
         asr_iter_df.to_csv(report_dir / "asr_vs_iter.csv", index=False)
-    if variance_df is not None and not variance_df.empty:
-        variance_df.to_csv(report_dir / "intra_batch_variance.csv", index=False)
+    if coverage_df is not None and not coverage_df.empty:
+        coverage_df.to_csv(report_dir / "judge_coverage.csv", index=False)
     if fairface_df is not None and not fairface_df.empty:
         # NOTE: as of v2.7 this is the iterative *terminal* batch per seed (was
         # all-iterations). Kept under the historical name for dashboard/report
@@ -461,8 +445,6 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
 
     asr_chart_svg = _svg_asr_curves(asr_iter_df) if asr_iter_df is not None else ""
 
-    axis_names, axis_rows = _pivot_axis_summary(axis_df)
-
     html = _render_html(
         run_id=run_dir.name,
         meta=meta,
@@ -470,11 +452,10 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
         per_category_rows=cat_df.to_dict("records") if not cat_df.empty else [],
         baseline_vs_iter=bvi,
         adversarial_bias_rows=abs_cat_df.to_dict("records") if not abs_cat_df.empty else [],
-        stereotype_rows=stereotype_df.to_dict("records") if not stereotype_df.empty else [],
         clusters=clusters_data,
         thumbs_by_category=thumbs_by_category,
         asr_chart_svg=asr_chart_svg,
-        variance_rows=variance_df.to_dict("records") if variance_df is not None and not variance_df.empty else [],
+        coverage_rows=coverage_df.to_dict("records") if coverage_df is not None and not coverage_df.empty else [],
         fairface_rows=fairface_df.to_dict("records") if fairface_df is not None and not fairface_df.empty else [],
         fairface_delta_rows=(
             fairface_delta_df.to_dict("records")
@@ -501,23 +482,18 @@ def run_report(run_dir: Path, skip_fairface: bool = False) -> None:
             if agreement_gender_df is not None and not agreement_gender_df.empty
             else []
         ),
-        axis_names=axis_names,
-        axis_rows=axis_rows,
     )
     (report_dir / "report.html").write_text(html, encoding="utf-8")
 
     logger.info("Report written to %s", report_dir)
     logger.info("  summary.csv                    → %d rows", len(summary_df) if not summary_df.empty else 0)
     logger.info("  per_category.csv               → %d rows", len(cat_df) if not cat_df.empty else 0)
-    logger.info("  per_axis.csv                   → %d rows", len(axis_df) if axis_df is not None and not axis_df.empty else 0)
-    if not stereotype_df.empty:
-        logger.info("  stereotype_elicitation.csv     → %d rows", len(stereotype_df))
     if not abs_seed_df.empty:
         logger.info("  adversarial_bias_per_seed.csv  → %d rows", len(abs_seed_df))
     if not abs_cat_df.empty:
         logger.info("  adversarial_bias_by_category.csv → %d rows", len(abs_cat_df))
     logger.info("  asr_vs_iter.csv                → %d rows", len(asr_iter_df) if asr_iter_df is not None else 0)
-    logger.info("  intra_batch_variance.csv       → %d rows", len(variance_df) if variance_df is not None else 0)
+    logger.info("  judge_coverage.csv             → %d rows", len(coverage_df) if coverage_df is not None else 0)
     if fairface_df is not None and not fairface_df.empty:
         logger.info("  fairface_per_category.csv      → %d rows (iterative terminal)", len(fairface_df))
     if fairface_delta_df is not None and not fairface_delta_df.empty:
@@ -576,19 +552,16 @@ def _render_html(
     per_category_rows: list[dict],
     baseline_vs_iter: dict,
     adversarial_bias_rows: list[dict],
-    stereotype_rows: list[dict],
     clusters: list[dict],
     thumbs_by_category: dict[str, list[str]],
     asr_chart_svg: str,
-    variance_rows: list[dict],
+    coverage_rows: list[dict],
     fairface_rows: list[dict],
     fairface_delta_rows: list[dict],
     distribution_gap_rows: list[dict],
     bls_alignment_rows: list[dict],
     agreement_spearman_rows: list[dict],
     agreement_gender_rows: list[dict],
-    axis_names: list[str],
-    axis_rows: list[dict],
 ) -> str:
     from jinja2 import Environment, FileSystemLoader  # type: ignore[import]
 
@@ -602,21 +575,18 @@ def _render_html(
         per_category=per_category_rows,
         baseline_vs_iter=baseline_vs_iter if baseline_vs_iter else None,
         adversarial_bias_rows=adversarial_bias_rows,
-        stereotype_rows=stereotype_rows,
         clusters=clusters,
         thumbs_by_category=thumbs_by_category,
         version=__version__,
         generated_at=datetime.now(timezone.utc).isoformat(),
         asr_chart_svg=asr_chart_svg,
-        variance_rows=variance_rows,
+        coverage_rows=coverage_rows,
         fairface_rows=fairface_rows,
         fairface_delta_rows=fairface_delta_rows,
         distribution_gap_rows=distribution_gap_rows,
         bls_alignment_rows=bls_alignment_rows,
         agreement_spearman_rows=agreement_spearman_rows,
         agreement_gender_rows=agreement_gender_rows,
-        axis_names=axis_names,
-        axis_rows=axis_rows,
     )
 
 

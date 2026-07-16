@@ -18,14 +18,13 @@ import streamlit as st
 from ouroboros.metrics import (
     asr_vs_iter,
     baseline_vs_iterative,
-    intra_batch_variance,
+    judge_coverage,
     load_baseline,
     load_run,
-    per_axis_summary,
     per_category,
     summary_per_seed,
 )
-from ouroboros.web.charts import asr_vs_iter_chart, per_axis_chart
+from ouroboros.web.charts import asr_vs_iter_chart
 from ouroboros.web.data import (
     get_results_dir,
     list_runs,
@@ -126,47 +125,33 @@ if not asr_iter_df.empty:
 else:
     st.caption("Not enough data to plot ASR curves.")
 
-# ── Per-axis judge scores ─────────────────────────────────────────────────────
-
-st.subheader("Judge Per-Axis Scores (0–10)")
-axis_df = per_axis_summary(run_df)
-if not axis_df.empty:
-    try:
-        st.altair_chart(per_axis_chart(axis_df), use_container_width=True)
-    except Exception as e:
-        st.warning(f"Chart render failed: {e}. Showing raw data.")
-        st.dataframe(axis_df, use_container_width=True)
-else:
-    st.caption("No per-axis data available.")
-
 # ── Baseline vs. iterative comparison ────────────────────────────────────────
 
 if not baseline_df.empty:
-    st.subheader("Baseline vs. Iterative — Visual ASR")
+    st.subheader("Baseline vs. Iterative — Gender ASR & Skew")
     from ouroboros.config import FULL_BUDGET, TEST_BUDGET
 
     _budget = TEST_BUDGET if cfg.get("mode", "test") == "test" else FULL_BUDGET
     bvi = baseline_vs_iterative(
         baseline_df,
         run_df,
-        bias_threshold=_budget.bias_threshold,
         success_n_of_m=_budget.success_n_of_m,
     )
     if bvi:
         b_col1, b_col2, b_col3, b_col4 = st.columns(4)
-        b_col1.metric("Baseline visual ASR", f"{bvi.get('baseline_visual_asr', 0):.3f}")
-        b_col2.metric("Iterative visual ASR", f"{bvi.get('iterative_visual_asr', 0):.3f}")
+        b_col1.metric("Baseline ASR", f"{bvi.get('baseline_asr', 0):.3f}")
+        b_col2.metric("Iterative ASR", f"{bvi.get('iterative_asr', 0):.3f}")
         b_col3.metric(
-            "Iterative mean max bias",
-            f"{bvi.get('iterative_mean_max_visual_bias', 0):.2f}",
+            "Iterative mean max skew",
+            f"{bvi.get('iterative_mean_max_skew', 0):.2f}",
         )
         b_col4.metric(
             "Mean iters to success",
-            f"{bvi.get('iterative_mean_iters_to_visual_success', 0):.1f}",
+            f"{bvi.get('iterative_mean_iters_to_success', 0):.1f}",
         )
         st.caption(
-            "Paired N-of-M visual ASR on the judge's per-image bias scores. "
-            "Stereotype elicitation (SER/SRG) is reported separately."
+            "Paired label-based N-of-M gender ASR (majority perceived gender ≥ N) "
+            "and per-batch skew, computed identically on both sides."
         )
 
 # ── Per-seed summary ──────────────────────────────────────────────────────────
@@ -185,12 +170,12 @@ if not sum_df.empty:
     display["outcome"] = display["outcome"].map(_outcome_badge)
     st.dataframe(display, use_container_width=True)
 
-# ── Intra-batch variance ──────────────────────────────────────────────────────
+# ── Judge coverage ────────────────────────────────────────────────────────────
 
-var_df = intra_batch_variance(run_df)
-if not var_df.empty:
-    with st.expander("Intra-Batch Variance", expanded=False):
-        st.dataframe(var_df, use_container_width=True)
+cov_df = judge_coverage(run_df)
+if not cov_df.empty:
+    with st.expander("Judge Coverage (unclear rate)", expanded=False):
+        st.dataframe(cov_df, use_container_width=True)
 
 # ── FairFace KL (from report CSV if available) ────────────────────────────────
 
