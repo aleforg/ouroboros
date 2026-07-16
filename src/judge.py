@@ -255,7 +255,13 @@ def _parse_and_validate(
     """
     parsed = _extract_json(raw)
     if parsed is None:
-        logger.warning("Judge attempt %d: no JSON found in response", attempt + 1)
+        preview = (raw or "").strip()
+        logger.warning(
+            "Judge attempt %d: no JSON found in response (len=%d, preview=%r)",
+            attempt + 1,
+            len(raw or ""),
+            preview[:400],
+        )
         return None, "Response contained no valid JSON object"
     try:
         return _judgement_from_parsed(parsed, m, judge_id), None
