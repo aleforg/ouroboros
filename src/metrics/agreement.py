@@ -1,20 +1,19 @@
-"""Judge <-> FairFace convergent-validity metrics.
+"""Judge <-> FairFace convergent-validity metrics (gender only, v3.0).
 
-Two post-hoc checks of whether the VLM judge's subjective scores agree with
-the objective FairFace classifier on the axes both can see (gender, race,
-age). Agreement raises confidence in the judge; it is NOT ground truth —
-both instruments share failure modes on stylized/non-photographic output.
+Two post-hoc checks that the VLM gender classifier agrees with the FairFace
+classifier — the core of RQ1. Agreement raises confidence in the judge; it is
+NOT ground truth (both instruments share failure modes on stylized output).
 
-1. judge_fairface_axis_spearman: seed-level Spearman rank correlation
-   between the judge's mean 0-10 axis score and the FairFace KL divergence
-   on the same axis. Scales are incommensurable (ordinal 0-10 vs nats), so
-   only rank agreement is meaningful.
+1. judge_fairface_axis_spearman: seed-level Spearman rank correlation between
+   the judge's mean batch gender skew (2·|female_share−0.5|) and the FairFace
+   gender-KL divergence, across seeds. Both grow with imbalance, so rank
+   agreement is the meaningful comparison.
 
-2. judge_fairface_gender_agreement: per-image Cohen's kappa between the
-   judge's observed_demographics gender label and the FairFace label, on
-   images where exactly one face was detected (clean 1:1 match). Gender
-   only: the judge's free-text race buckets (light/medium/dark) do not map
-   onto FairFace's 7 races, and age ranges do not align with its 9 buckets.
+2. judge_fairface_gender_agreement: per-image Cohen's kappa between the judge's
+   per-image gender label and the FairFace label, on images where exactly one
+   face was detected (clean 1:1 match). This is the primary RQ1 statistic.
+
+Race and age are out of thesis scope: the judge is a gender classifier only.
 
 Pure pandas/python — no torch (fairface math helpers are lazy-safe).
 """
@@ -23,20 +22,14 @@ from __future__ import annotations
 import pandas as pd
 
 from ouroboros.fairface import AXIS_BUCKETS, AXIS_COLUMN, axis_metrics
+from ouroboros.judge import GENDER_FEMALE, GENDER_MALE, normalize_gender_label
 from ouroboros.metrics.fairness import _spearman
-
-# FairFace axis -> judge per_axis_scores key
-AXIS_PAIRS: dict[str, str] = {
-    "gender": "gender_skew",
-    "race": "race_skew",
-    "age": "age_skew",
-}
 
 SPEARMAN_COLUMNS = [
     "axis",
     "judge_axis",
     "n_seeds",
-    "mean_judge_score",
+    "mean_judge_skew",
     "mean_kl_nats",
     "spearman_rho",
 ]
@@ -67,70 +60,59 @@ def judge_fairface_axis_spearman(
     fairface_faces: pd.DataFrame,
     alpha: float = 1.0,
 ) -> pd.DataFrame:
-    """Seed-level rank correlation between judge axis scores and FairFace KL.
+    """Seed-level rank correlation between judge gender skew and FairFace KL.
 
-    For each axis both instruments cover, compute per seed (a) the mean of
-    the judge's 0-10 score over judged iterations and (b) KL(p_emp || U) of
-    the FairFace labels pooled over all the seed's faces, then Spearman's
-    rho across seeds. Seeds missing either side are dropped per axis.
+    Per seed, (a) the mean of the judge's batch gender skew over judged
+    iterations and (b) KL(p_emp || U) of the FairFace gender labels pooled over
+    the seed's faces; then Spearman's rho across seeds. Seeds missing either
+    side are dropped.
     """
     if run_df is None or run_df.empty or "seed_id" not in run_df.columns:
         return _empty_spearman()
     if fairface_faces is None or fairface_faces.empty or "seed_id" not in fairface_faces.columns:
         return _empty_spearman()
 
-    rows: list[dict] = []
-    for axis, judge_axis in AXIS_PAIRS.items():
-        judge_col = f"axis_{judge_axis}"
-        ff_col = AXIS_COLUMN[axis]
-        if judge_col not in run_df.columns or ff_col not in fairface_faces.columns:
-            continue
-
-        judge_means: dict[str, float] = {}
-        scores = pd.to_numeric(run_df[judge_col], errors="coerce")
-        for seed_id, grp in scores.groupby(run_df["seed_id"]):
-            valid = grp.dropna()
-            if not valid.empty:
-                judge_means[str(seed_id)] = float(valid.mean())
-
-        kl_by_seed: dict[str, float] = {}
-        for seed_id, grp in fairface_faces.groupby("seed_id"):
-            counts = grp[ff_col].value_counts().to_dict()
-            m = axis_metrics(counts, AXIS_BUCKETS[axis], alpha=alpha)
-            if m.kl_nats is not None:
-                kl_by_seed[str(seed_id)] = m.kl_nats
-
-        common = sorted(set(judge_means) & set(kl_by_seed))
-        if not common:
-            continue
-        xs = [judge_means[s] for s in common]
-        ys = [kl_by_seed[s] for s in common]
-        rho = _spearman(xs, ys)
-        rows.append({
-            "axis": axis,
-            "judge_axis": judge_axis,
-            "n_seeds": len(common),
-            "mean_judge_score": round(sum(xs) / len(xs), 4),
-            "mean_kl_nats": round(sum(ys) / len(ys), 4),
-            "spearman_rho": round(rho, 4) if rho is not None else None,
-        })
-
-    if not rows:
+    axis = "gender"
+    ff_col = AXIS_COLUMN[axis]
+    if "skew" not in run_df.columns or ff_col not in fairface_faces.columns:
         return _empty_spearman()
-    return pd.DataFrame(rows)
+
+    judge_means: dict[str, float] = {}
+    skews = pd.to_numeric(run_df["skew"], errors="coerce")
+    for seed_id, grp in skews.groupby(run_df["seed_id"]):
+        valid = grp.dropna()
+        if not valid.empty:
+            judge_means[str(seed_id)] = float(valid.mean())
+
+    kl_by_seed: dict[str, float] = {}
+    for seed_id, grp in fairface_faces.groupby("seed_id"):
+        counts = grp[ff_col].value_counts().to_dict()
+        m = axis_metrics(counts, AXIS_BUCKETS[axis], alpha=alpha)
+        if m.kl_nats is not None:
+            kl_by_seed[str(seed_id)] = m.kl_nats
+
+    common = sorted(set(judge_means) & set(kl_by_seed))
+    if not common:
+        return _empty_spearman()
+    xs = [judge_means[s] for s in common]
+    ys = [kl_by_seed[s] for s in common]
+    rho = _spearman(xs, ys)
+    return pd.DataFrame([{
+        "axis": axis,
+        "judge_axis": "gender_skew",
+        "n_seeds": len(common),
+        "mean_judge_skew": round(sum(xs) / len(xs), 4),
+        "mean_kl_nats": round(sum(ys) / len(ys), 4),
+        "spearman_rho": round(rho, 4) if rho is not None else None,
+    }])
 
 
 def _normalize_judge_gender(raw: object) -> str | None:
-    """Map the judge's free-text gender label to a FairFace bucket."""
-    if not isinstance(raw, str):
-        return None
-    label = raw.strip().lower()
-    if not label:
-        return None
-    # Check female first: "female" contains "male", "woman" contains "man"
-    if "fem" in label or "woman" in label or "women" in label or label == "f":
+    """Map the judge's gender label to a FairFace bucket (Female/Male), or None."""
+    label = normalize_gender_label(raw)
+    if label == GENDER_FEMALE:
         return "Female"
-    if "male" in label or "man" in label or "men" in label or label == "m":
+    if label == GENDER_MALE:
         return "Male"
     return None
 
@@ -157,9 +139,9 @@ def judge_fairface_gender_agreement(
 ) -> pd.DataFrame:
     """Per-image gender agreement between judge and FairFace (Cohen's kappa).
 
-    The judge's observed_demographics["gender"] list is positionally aligned
-    with the successfully generated images of the iteration (same order the
-    judge received them). Comparison is restricted to images where FairFace
+    The judge's per_image_genders list is positionally aligned with the
+    successfully generated images of the iteration (same order the judge
+    received them). Comparison is restricted to images where FairFace
     detected exactly one face; iterations whose label list does not match
     the image count, and labels that cannot be normalized, are skipped and
     counted. Returns a single-row DataFrame.
@@ -196,8 +178,7 @@ def judge_fairface_gender_agreement(
             continue
         n_images_judged += len(image_paths)
 
-        demo = judge.get("observed_demographics") or {}
-        gender_labels = demo.get("gender") or []
+        gender_labels = judge.get("per_image_genders") or []
         if len(gender_labels) != len(image_paths):
             n_skipped_label += len(image_paths)
             continue

@@ -40,14 +40,15 @@ def _run_row(
     return {
         "seed_id": seed_id,
         "category": "male_coded",
-        "axis_gender_skew": gender_skew,
-        "axis_race_skew": None,
-        "axis_age_skew": None,
+        # ``skew`` is the per-iteration batch gender skew the Spearman metric
+        # ranks against the FairFace gender KL (rank-only, so any monotone
+        # encoding of imbalance works as a fixture value).
+        "skew": gender_skew,
         "samples": [{"path": p, "outcome": "image"} for p in image_paths],
         "judge": {
-            "observed_demographics": {"gender": judge_genders}
+            "per_image_genders": judge_genders
             if judge_genders is not None
-            else {},
+            else [],
         },
     }
 
