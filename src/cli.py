@@ -86,7 +86,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="flux: FLUX.2-klein-4B via mflux (Apple Silicon, default) | "
              "diffusers: FLUX.1-schnell via HuggingFace diffusers (NVIDIA CUDA, RunPod)",
     )
-    run_p.add_argument("--flux-quantize", type=int, choices=[3, 4, 5, 6, 8], default=4,
+    run_p.add_argument("--flux-quantize", type=int, choices=[3, 4, 5, 6, 8, 16], default=4,
                        dest="flux_quantize", metavar="BITS")
     run_p.add_argument("--flux-steps", type=int, default=4, dest="flux_steps",
                        help="FLUX inference steps (default: 4 for klein distilled)")

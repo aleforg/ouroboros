@@ -88,8 +88,8 @@ with st.form("launch_form"):
     col_e, col_f, col_g = st.columns(3)
     with col_e:
         flux_quantize = st.selectbox(
-            "Quantization bits", [3, 4, 5, 6, 8], index=1,
-            help="Q4 ≈ 5 GB | Q8 ≈ 8 GB"
+            "Quantization bits", [3, 4, 5, 6, 8, 16], index=1,
+            help="Q4 ≈ 3.5 GB | Q8 ≈ 6.5 GB | 16 (bf16) ≈ 11 GB"
         )
     with col_f:
         flux_steps = st.number_input(
