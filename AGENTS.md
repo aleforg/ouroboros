@@ -14,7 +14,7 @@ The framework is built for **Apple Silicon Macs with 16 GB unified RAM** (M4 bas
 
 - Attacker capped at ~8B 4-bit params (default `dolphin-llama3:latest` via Ollama, ~5 GB).
 - Default target is local FLUX.2-klein-4B via mflux (~5 GB). Two backends are wired (`target_backend: Literal["flux", "diffusers"]` in `src/config.py`, selectable via `--target-backend`): `flux` (mflux, Apple Silicon, the default for the 16 GB Mac) and `diffusers` (FLUX.1-schnell via HuggingFace diffusers on **NVIDIA CUDA** — for cloud GPU boxes like RunPod, needs the `[diffusers]` extra). The factory `build_target()` in [src/targets/base.py](src/targets/base.py) keeps adding a further backend (DALL-E, Imagen, SDXL on Vertex) a one-file change without touching the loop.
-- Default judge is **cloud** Gemini 2.5 Pro via Vertex (0 GB local). `JUDGE_BACKEND_DEFAULT = "gemini"` + `JUDGE_GEMINI_DEFAULT = "gemini-2.5-pro"` in `src/config.py`. MLX (`mlx-vlm` Qwen2.5-VL-7B-4bit) and Ollama (`qwen2.5vl:7b`) are offline fallbacks.
+- Default judge is **cloud** Gemini 2.5 Pro via Vertex (0 GB local). `JUDGE_BACKEND_DEFAULT = "gemini"` + `JUDGE_GEMINI_DEFAULT = "gemini-2.5-pro"` in `src/config.py`. MLX (`mlx-vlm` Qwen3-VL-8B-4bit) and Ollama (`qwen3-vl:8b`) are offline fallbacks.
 - **Aggressive unload between phases** (`cfg.aggressive_unload=True`) is critical: attacker → `aclose()` (evicts Ollama model) → target → `aclose()` (frees MLX/Metal cache) → judge. Peak RAM is `max(attacker, target)`, not the sum. `--no-aggressive-unload` keeps both resident and risks OOM.
 - `src/config.py:check_ram_budget` aborts startup if the estimate exceeds `RAM_BUDGET_GB` (13 GB) unless `--allow-swap` is passed.
 

@@ -198,8 +198,8 @@ Riceve M immagini + il prompt + la base scene, e restituisce uno **score struttu
 | Backend | Flag | Modello | RAM locale | Note |
 |---|---|---|---|---|
 | **gemini** *(default)* | `--judge-backend gemini` | `gemini-2.5-pro` su Vertex AI | 0 GB | Richiede credenziali Vertex (`GOOGLE_CLOUD_PROJECT`/`LOCATION`); reasoning VLM di alta qualità |
-| **mlx** *(offline)* | `--judge-backend mlx` | `mlx-community/Qwen2.5-VL-7B-Instruct-4bit` | ~5 GB | Nessun `format:json`, retry via prompt; Apple Silicon native |
-| **ollama** *(offline)* | `--judge-backend ollama` | `qwen2.5vl:7b` | ~5 GB | `format:"json"` disponibile; più lento di MLX |
+| **mlx** *(offline)* | `--judge-backend mlx` | `mlx-community/Qwen3-VL-8B-Instruct-4bit` | ~6 GB | Nessun `format:json`, retry via prompt; Apple Silicon native |
+| **ollama** *(offline)* | `--judge-backend ollama` | `qwen3-vl:8b` | ~6 GB | `format:"json"` disponibile; più lento di MLX |
 
 Il default è passato da MLX a **Gemini cloud** nella v2. Motivazione: con il target ora locale (FLUX), avere anche il judge locale creava saturazione RAM. Spostando il judge in cloud si libera tutta la finestra locale per FLUX (vedi `02-architecture.md`).
 

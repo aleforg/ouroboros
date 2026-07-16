@@ -160,17 +160,18 @@ Gemini 2.5 Pro documentation.
 
 Modello VLM cloud chiuso, disponibile via Vertex AI con auth `GOOGLE_GENAI_USE_VERTEXAI=True`. Ouroboros lo usa come **judge default** (`--judge-backend gemini`, `JUDGE_GEMINI_DEFAULT="gemini-2.5-pro"` in `src/config.py`) — riceve M immagini + prompt e produce un JSON `BiasJudgement`. Pricing $1.25/$10.00 per 1M token input/output → ~$0.006 per call → ~$5 per full run su Stable Bias (175 seed, vedi `docs/04-components.md`).
 
-### Qwen2.5-VL (judge fallback offline)
+### Qwen3-VL (judge fallback offline)
 
 <a id="qwen-vl"></a>
 **Bai, S., Chen, K., Liu, X., Wang, J., et al. (2025).**
-*Qwen2.5-VL Technical Report.*
-arXiv:2502.13923.
-🔗 https://arxiv.org/abs/2502.13923
+*Qwen3-VL Technical Report.*
+arXiv:2511.21631.
+🔗 https://arxiv.org/abs/2511.21631
 
-Vision-Language Model 7B/72B di Alibaba/Qwen. Ouroboros lo usa come fallback offline (`--judge-backend mlx` o `--judge-backend ollama`) quando non è disponibile accesso a Vertex AI. Il judge default è Gemini 2.5 Pro cloud.
+Vision-Language Model (2B/4B/8B + MoE variants) di Alibaba/Qwen. Ouroboros lo usa come fallback offline (`--judge-backend mlx` o `--judge-backend ollama`) quando non è disponibile accesso a Vertex AI. Default locale: Qwen3-VL-8B-4bit (più recente e capace della generazione Qwen2.5-VL). Il judge default cloud è Gemini 2.5 Pro.
 
-🔗 HF: https://huggingface.co/mlx-community/Qwen2.5-VL-7B-Instruct-4bit
+🔗 HF MLX: https://huggingface.co/mlx-community/Qwen3-VL-8B-Instruct-4bit
+🔗 Ollama: `qwen3-vl:8b`
 
 ### Dolphin-LLaMA3 (attacker)
 
@@ -201,7 +202,7 @@ Base model. Rilevante per capire la baseline capability dell'attacker.
 🔗 GitHub: https://github.com/ml-explore/mlx
 🔗 Docs: https://ml-explore.github.io/mlx/
 
-Framework di array Apple ottimizzato per Apple Silicon (unified memory, accelerazione Metal). Ouroboros lo usa per il target FLUX (via mflux) e per il judge fallback offline Qwen2.5-VL (30-50% più veloce di Ollama su M-series).
+Framework di array Apple ottimizzato per Apple Silicon (unified memory, accelerazione Metal). Ouroboros lo usa per il target FLUX (via mflux) e per il judge fallback offline (Qwen3-VL via mlx-vlm è più veloce di Ollama su M-series).
 
 ### mlx-vlm
 
@@ -288,7 +289,7 @@ Se usi Ouroboros in pubblicazioni, cita almeno:
 - **Il paper PAIR originale** ([Chao et al., 2023](#pair)) come methodology origin.
 - **Il dataset CLEAR-Bias** ([Cantini et al.](#clear-bias)) per la tassonomia.
 - **BOLD** [Dhamala et al., 2021] per i prompt arricchiti.
-- **Qwen2.5-VL** [Bai et al., 2025] o il modello judge specifico usato.
+- **Qwen3-VL** [Bai et al., 2025] o il modello judge specifico usato.
 
 ## Da dove proseguire
 

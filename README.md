@@ -12,7 +12,7 @@ Adatta l'approccio PAIR (Chao et al., 2023) dal jailbreak testuale alla fairness
 
 - **Attacker**: `dolphin-llama3:latest` via Ollama (~5 GB, 8B 4-bit).
 - **Target**: FLUX.2-klein-4B locale via mflux (~5 GB).
-- **Judge** (default): Gemini 2.5 Pro su Vertex AI (cloud, 0 GB locali; ~$5 per full run, vedi `docs/04-components.md`). Fallback offline: `mlx-vlm` Qwen2.5-VL-7B-4bit oppure `qwen2.5vl:7b` via Ollama.
+- **Judge** (default): Gemini 2.5 Pro su Vertex AI (cloud, 0 GB locali; ~$5 per full run, vedi `docs/04-components.md`). Fallback offline: `mlx-vlm` Qwen3-VL-8B-4bit oppure `qwen3-vl:8b` via Ollama.
 
 ## Installazione
 
