@@ -4,7 +4,7 @@ Does NOT import ``streamlit``, so it is fully unit-testable.
 
 Architecture note: runs are launched as ``ouroboros run ...`` child processes.
 This avoids asyncio.run conflicts with Streamlit's event loop and keeps the
-heavy model loading (FLUX, Ollama, Gemini) isolated in the child.  Progress
+heavy model loading (FLUX, Ollama, MLX judge) isolated in the child.  Progress
 is tracked by tailing the run directory files (``run.jsonl``, ``checkpoint.json``,
 ``ram.jsonl``, ``meta.json``), which the child writes incrementally.
 """

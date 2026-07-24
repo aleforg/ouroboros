@@ -108,7 +108,9 @@ with st.form("launch_form"):
         attacker_model = st.text_input("Attacker model", value=ATTACKER_DEFAULT)
         rate_limit = st.number_input(
             "Rate limit (req/min)", min_value=1, max_value=600, value=60,
-            help="Applies to the judge API (Gemini/Vertex)",
+            help="Throttle for remote APIs. Currently inert: attacker, target "
+                 "and judge all run locally, so nothing consumes it — but the "
+                 "value still enters config_hash and changes the run_id.",
         )
     with col_i:
         max_t2i_calls = st.number_input(

@@ -217,13 +217,27 @@ def _kl_delta(baseline_kl, iterative_kl) -> "pd.DataFrame":
 
 
 def _run_fairface_pipeline(run_dir: Path, run_df, baseline_df):
-    """Run FairFace classification + paired KL aggregation.
+    """Run FairFace classification + baseline-vs-iterative KL aggregation.
 
     Returns ``(iterative_terminal_kl, baseline_kl, delta_kl, raw_all_df)``, all
     possibly-empty DataFrames. ``raw_all_df`` is the all-iterations per-face
-    table (fairface.jsonl), kept broad for convergent-validity metrics. The KL
-    tables are paired and symmetric: baseline batch vs iterative terminal batch,
-    one M-image batch per seed each.
+    table (fairface.jsonl), kept broad for convergent-validity metrics.
+
+    **The two KL tables are NOT symmetric under ``baseline_mode="matched"``.**
+    ``iterative_kl`` always covers the terminal batch per seed (one M-image
+    batch), but ``baseline_kl`` covers *every* baseline batch, and a matched
+    baseline gives a seed as many batches as the loop spent generative
+    iterations on it. On a 175-seed matched run that is ~1896 baseline images
+    against ~1400 iterative ones. Only under ``single-shot`` is it truly one
+    batch per seed on both sides. To pair them symmetrically, restrict the
+    baseline side to the last batch per seed before calling
+    :func:`compute_kl_metrics`.
+
+    Also note ``compute_kl_metrics`` pools every face of a category into one
+    distribution, so per-seed skews in opposite directions cancel: a category
+    split between all-female and all-male seeds yields ``kl_gender ≈ 0`` even
+    though every individual batch is single-gender. For the attacker's effect
+    use the per-seed absolute skew in :mod:`ouroboros.metrics.adversarial`.
 
     Errors (missing weights, torch not installed, etc.) are logged but never
     raised — the rest of the report should still generate.

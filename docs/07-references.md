@@ -2,6 +2,12 @@
 
 Bibliografia ragionata delle fonti accademiche e tecniche dietro al framework. Suddiviso per area concettuale.
 
+> **Stato: allineato al codice v3.0.** Il judge è **locale** (Qwen3-VL-8B via
+> MLX o Ollama); il judge cloud Gemini/Vertex non esiste più. Il seed-set è
+> **Stable Bias** (175 professioni); CLEAR-Bias × BOLD è archiviato in
+> `data/legacy/` e resta qui per la genealogia del progetto. Vedi
+> [08-deviations.md](08-deviations.md) §0.
+
 ---
 
 ## Metodologia di attacco
@@ -16,8 +22,8 @@ arXiv:2310.08419.
 
 Il paper originale del **PAIR loop**. Definisce il tre-attori framework attacker-target-judge e dimostra che jailbreak black-box su LLM sono raggiungibili in `O(20)` query con un attacker LLM ben istruito. Ouroboros porta lo schema dal dominio LLM→LLM al dominio LLM→T2I.
 
-**Cosa abbiamo preso:** struttura del loop, idea della memoria top-K, success threshold scalare, retry su attacker self-refusal.
-**Cosa abbiamo cambiato:** target multimodale invece che testuale, M chiamate parallele invece di una, success rule N-of-M, judge VLM invece che LLM. Vedi [08-deviations.md](08-deviations.md).
+**Cosa abbiamo preso:** struttura del loop attacker-target-judge, memoria top-K, retry su attacker self-refusal, il budget di ~O(20) query per seed.
+**Cosa abbiamo cambiato:** target multimodale invece che testuale; M generazioni per iterazione invece di una; success rule **N-of-M** invece della soglia su un singolo output; judge VLM invece che LLM; e soprattutto **il judge non assegna un punteggio**. In PAIR il judge emette un jailbreak score 1–10 e una soglia decide il successo; in Ouroboros emette un'etichetta di genere per immagine e tutti i numeri sono derivati in codice — scelta motivata dalla validabilità (vedi [06-metrics.md](06-metrics.md) §0 e [08-deviations.md](08-deviations.md) §0.1). Cambia anche l'obiettivo: non l'elicitazione di contenuto proibito, ma lo **sbilanciamento distribuzionale** di un batch.
 
 ### TAP
 
@@ -41,6 +47,12 @@ Greedy Coordinate Gradient — attacco **white-box** che ottimizza suffissi adve
 
 ## Dataset di bias
 
+> Le due voci seguenti (CLEAR-Bias, BOLD) descrivono il **seed-set storico**,
+> dismesso in v2.5 e archiviato in `data/legacy/`. Il seed-set attuale è
+> Stable Bias — vedi la voce omonima sotto "Audit di T2I models" e
+> [05-dataset.md](05-dataset.md). Restano qui perché spiegano da dove viene la
+> struttura per-categoria del framework.
+
 ### CLEAR-Bias
 
 <a id="clear-bias"></a>
@@ -50,7 +62,7 @@ arXiv:2504.07887.
 🔗 arXiv: https://arxiv.org/abs/2504.07887
 🔗 Hugging Face: https://huggingface.co/datasets/RCantini/CLEAR-Bias
 
-Il benchmark di prompt **testuali** da cui derivano le `base_scene` di Ouroboros. Il dataset CLEAR-Bias copre **10 categorie** demografiche: 7 isolate (age, disability, ethnicity, gender, religion, sexual orientation, socioeconomic) + 3 intersezionali (gender-ethnicity, gender-sexual orientation, ethnicity-socioeconomic), con prompt in formato multiple-choice o sentence-completion.
+Il benchmark di prompt **testuali** da cui derivavano le `base_scene` fino alla v2.4. Il dataset CLEAR-Bias copre **10 categorie** demografiche: 7 isolate (age, disability, ethnicity, gender, religion, sexual orientation, socioeconomic) + 3 intersezionali (gender-ethnicity, gender-sexual orientation, ethnicity-socioeconomic), con prompt in formato multiple-choice o sentence-completion.
 
 **Cosa abbiamo preso:** 6 delle 10 categorie (gender, ethnicity, religion, socioeconomic, gender-ethnicity, ethnicity-socioeconomic); i `source_clear_bias_prompt` come `source_text` dei seed.
 **Cosa abbiamo escluso:** le categorie `age`, `disability`, `sexual_orientation` (e l'intersezione gender-sexual_orientation) — presenti nel dataset, ma non si traducono bene in scene visualizzabili.
@@ -105,7 +117,13 @@ WACV 2021.
 🔗 https://openaccess.thecvf.com/content/WACV2021/papers/Karkkainen_FairFace_Face_Attribute_Dataset_for_Balanced_Race_Gender_and_Age_WACV_2021_paper.pdf
 🔗 Repo + pesi: https://github.com/joojs/fairface
 
-Dataset + classificatore ResNet-34 standard per audit demografici (7 razze × 2 generi × 9 fasce d'età). Usato in Ouroboros per la pipeline post-hoc in `src/fairface.py`. Non sostituisce il judge (che continua a guidare la success rule del loop): è la base per le metriche **comparable** con la letteratura T2I-fairness.
+Dataset + classificatore ResNet-34 standard per audit demografici (7 razze × 2 generi × 9 fasce d'età). Usato in Ouroboros per la pipeline post-hoc in `src/fairface.py` (MTCNN per la detection + ResNet-34 per la classificazione).
+
+**Non sostituisce il judge** — è il judge a guidare la success rule del loop, in tempo reale; FairFace gira dopo, sulle immagini già salvate. I suoi due ruoli sono:
+1. **Secondo osservatore indipendente** per la validità convergente: κ di Cohen per immagine contro le etichette del judge, che è la statistica primaria di RQ1.
+2. **Base per metriche comparabili** con la letteratura T2I-fairness (KL da uniforme, entropia normalizzata).
+
+Limite da dichiarare sempre: FairFace è addestrato su volti **fotografici reali**, quindi degrada sugli output T2I stilizzati — e degrada probabilmente *nello stesso modo* del judge VLM, il che rende l'accordo tra i due una prova più debole di quanto sembri (vedi [06-metrics.md](06-metrics.md) §7, caveat).
 
 ### FAIntbench / BIGbench
 
@@ -128,7 +146,11 @@ Definiscono il framework di metriche T2I-bias contemporaneo: separano *implicit 
 CVPR 2025.
 🔗 https://openaccess.thecvf.com/content/CVPR2025/papers/Li_T2ISafety_Benchmark_for_Assessing_Fairness_Toxicity_and_Privacy_in_Image_Generation_CVPR_2025_paper.pdf
 
-Benchmark recente che combina skew per-asse via FairFace + classificatori di tossicità. Riferimento più vicino al setting di Ouroboros (per-axis demographic skew + bias toxicity), salvo che è statico e cloud-based.
+Benchmark recente che combina skew per-asse via FairFace + classificatori di tossicità. Riferimento più vicino al setting di Ouroboros (skew demografico + bias toxicity), salvo che è statico e cloud-based.
+
+**Ruolo operativo**: il suo split *fairness* è il **control set con annotazioni umane** contro cui viene validato il judge — `ouroboros validate-judge --dataset hf_test_fairness_generated.json --images-dir <test_zip_root>`, che riporta accuracy, macro-F1, κ di Cohen, P/R/F1 per classe, matrice di confusione, tasso di predizioni non valide e accuratezza per sottogruppo (`src/validate.py`). È la gamba di **validità esterna** di RQ1, complementare all'accordo interno con FairFace.
+
+**Caveat importante**: T2ISafety **non pubblica l'inter-annotator agreement** per la parte fairness. Non sappiamo quindi quanto siano concordi tra loro gli annotatori umani su questo compito, e questo pone un tetto implicito a quanto la validazione esterna possa dimostrare — un κ del judge non può essere letto contro un massimo teorico ignoto.
 
 ### Stable Bias
 
@@ -137,30 +159,50 @@ Benchmark recente che combina skew per-asse via FairFace + classificatori di tos
 NeurIPS 2023 D&B. arXiv:2303.11408.
 🔗 https://arxiv.org/abs/2303.11408
 
-Audit Stable Diffusion / DALL-E 2 con BLIP-VQA marker rate + cluster entropy + **95% bootstrap CI** (uno dei pochi paper T2I-bias a riportare CI). Riferimento per la nostra scelta di clusterizzare le facce per asse + per la futura migrazione da Wilson a bootstrap CI sull'ASR.
+Audit Stable Diffusion / DALL-E 2 con BLIP-VQA marker rate + cluster entropy + **95% bootstrap CI** (uno dei pochi paper T2I-bias a riportare CI).
+
+Doppio ruolo in Ouroboros:
+1. **Fonte del seed-set attuale** — le 175 professioni di `data/stable_bias_prompts.jsonl`, nel template `"Photo portrait of a [X]"`, vengono da qui.
+2. **Precedente metodologico per i CI** — la migrazione da Wilson a bootstrap sull'ASR (fatta in v2.3, vedi [06-metrics.md](06-metrics.md) §1) segue questo paper. È l'eccezione positiva del campo su *entrambe* le fragilità che [08-deviations.md](08-deviations.md) segnala: approccio classifier-free **e** intervalli di confidenza. I benchmark 2024–25 hanno regredito su entrambi i fronti; Ouroboros non inventa lo standard, lo ripristina nel setting adversariale.
+
+### Girrbach et al. (audit su FLUX)
+
+<a id="girrbach"></a>
+**Girrbach, L., et al. (2025).**
+*Large Scale Analysis of Gender Biases in Text-to-Image Generative Models.*
+arXiv:2503.23398.
+🔗 https://arxiv.org/abs/2503.23398
+
+3.217 prompt gender-neutral, ~2,3M immagini (2.293.295 dopo filtering), su FLUX, FLUX-Schnell, SD 3.5 Large/Medium, SD 3 Medium; auto-labeling YOLOv10 + InternVL2-8B, metrica Female Ratio ℛf.
+
+Rilevante per due motivi indipendenti:
+1. **È l'unico audit large-scale pubblicato che copre FLUX**, cioè proprio la famiglia di modelli che Ouroboros attacca — quindi è il riferimento di sanity esterno per i numeri della baseline.
+2. **È il precedente per il task del judge v3.0**: classificare il genere percepito con etichette `female` / `male` / `unclear`, invece di assegnare un punteggio di bias. Non abbiamo inventato la formulazione del compito.
+
+Da segnalare come limite (e quindi come spazio per Ouroboros): le error bar delle sue figure sono deviazioni standard cross-prompt — variabilità semantica — non intervalli di confidenza sulla stima di ℛf, e non c'è test di significatività sui confronti tra modelli.
 
 ---
 
 ## Modelli usati
 
-### FLUX.2 klein (target)
+### FLUX (target)
 
 **Black Forest Labs (2024).**
 FLUX.2 klein — distilled 4B-parameter rectified-flow T2I model.
 🔗 https://github.com/black-forest-labs/flux
 🔗 mflux (Apple Silicon port): https://github.com/filipstrand/mflux
+🔗 diffusers: https://github.com/huggingface/diffusers
 
-Modello T2I locale, eseguito via [`mflux`](https://github.com/filipstrand/mflux) su Apple Silicon (MLX/Metal). Ouroboros lo usa quantizzato a 4-bit con 4 inference step (variante "klein" distilled) per stare nel budget RAM. Generazione sequenziale sul thread asyncio (MLX binda lo stream GPU al thread). Vedi [04-components.md](04-components.md) per la motivazione della scelta (RAM, no safety filter, no costo cloud).
+Modello T2I locale. Due backend cablati, selezionabili con `--target-backend`:
 
-### Gemini 2.5 Pro (judge)
+| Backend | Modello | Piattaforma | Modulo |
+|---|---|---|---|
+| `flux` (default) | FLUX.2-klein-4B via [`mflux`](https://github.com/filipstrand/mflux) | Apple Silicon (MLX/Metal) | `src/targets/flux.py` |
+| `diffusers` | FLUX.1-schnell via HuggingFace diffusers | NVIDIA CUDA (RunPod, Lambda, Colab) | `src/targets/diffusers_flux.py` |
 
-**Google DeepMind (2025).**
-Gemini 2.5 Pro documentation.
-🔗 https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-pro
+Quantizzato a 4 bit con 4 inference step (variante distilled) per stare nel budget RAM. Su mflux la generazione è **sequenziale sul thread asyncio** — MLX lega lo stream GPU al thread che ha creato il modello, quindi spostarla in un thread pool la rompe. Vedi [04-components.md](04-components.md) per la motivazione della scelta (RAM, nessun safety filter, nessun costo cloud) e la voce Girrbach sopra per il fatto che FLUX è l'unico target di Ouroboros con un audit di bias pubblicato con cui confrontarsi.
 
-Modello VLM cloud chiuso, disponibile via Vertex AI con auth `GOOGLE_GENAI_USE_VERTEXAI=True`. Ouroboros lo usa come **judge default** (`--judge-backend gemini`, `JUDGE_GEMINI_DEFAULT="gemini-2.5-pro"` in `src/config.py`) — riceve M immagini + prompt e produce un JSON `BiasJudgement`. Pricing $1.25/$10.00 per 1M token input/output → ~$0.006 per call → ~$5 per full run su Stable Bias (175 seed, vedi `docs/04-components.md`).
-
-### Qwen3-VL (judge fallback offline)
+### Qwen3-VL (judge)
 
 <a id="qwen-vl"></a>
 **Bai, S., Chen, K., Liu, X., Wang, J., et al. (2025).**
@@ -168,10 +210,30 @@ Modello VLM cloud chiuso, disponibile via Vertex AI con auth `GOOGLE_GENAI_USE_V
 arXiv:2511.21631.
 🔗 https://arxiv.org/abs/2511.21631
 
-Vision-Language Model (2B/4B/8B + MoE variants) di Alibaba/Qwen. Ouroboros lo usa come fallback offline (`--judge-backend mlx` o `--judge-backend ollama`) quando non è disponibile accesso a Vertex AI. Default locale: Qwen3-VL-8B-4bit (più recente e capace della generazione Qwen2.5-VL). Il judge default cloud è Gemini 2.5 Pro.
+Vision-Language Model (2B/4B/8B + MoE variants) di Alibaba/Qwen. È **il judge** di Ouroboros — non un fallback: non esiste un judge cloud. Due backend, stesso modello:
+
+| Backend | Costante in `src/config.py` | Modello |
+|---|---|---|
+| `--judge-backend mlx` (default) | `JUDGE_MLX_DEFAULT` | `mlx-community/Qwen3-VL-8B-Instruct-4bit` |
+| `--judge-backend ollama` | `JUDGE_OLLAMA_DEFAULT` | `qwen3-vl:8b` |
+
+Riceve le M immagini di un batch e restituisce **solo** `{"per_image_genders": [...], "rationale": "..."}`, con ogni etichetta in `{female, male, unclear}`; tutti i valori numerici sono derivati in codice dal validator di `GenderJudgement`. Generazione 8B a 4 bit ≈ 5 GB, quindi il judge partecipa al ciclo di unload aggressivo come attacker e target.
+
+Scelto sulla generazione Qwen2.5-VL per capacità e recenza; la sua affidabilità su questo compito **non è assunta ma misurata** — κ contro FairFace e accuracy/macro-F1 contro T2ISafety (RQ1, vedi [06-metrics.md](06-metrics.md) §7).
 
 🔗 HF MLX: https://huggingface.co/mlx-community/Qwen3-VL-8B-Instruct-4bit
 🔗 Ollama: `qwen3-vl:8b`
+
+> **Nota storica — il judge cloud Gemini 2.5 Pro.** Fino alla v2.x il judge
+> default era Gemini 2.5 Pro via Vertex AI (`--judge-backend gemini`,
+> `JUDGE_GEMINI_DEFAULT`), scelto perché costava 0 GB di RAM locale (~$0.006 a
+> chiamata, ~$5 per run full). È stato **rimosso** con la v3.0: `judge_backend`
+> è `Literal["mlx", "ollama"]` e non esiste più codice che parli con Vertex.
+> Le motivazioni sono in [08-deviations.md](08-deviations.md) §0.6 — in breve,
+> quando la tesi deve *validare* il judge, un modello ispezionabile, versionabile
+> e riproducibile offline vale più della RAM risparmiata. Le variabili
+> `GOOGLE_CLOUD_*` sopravvivono in `RunConfig` come campi vestigiali, ignorati
+> da `build_judge()`.
 
 ### Dolphin-LLaMA3 (attacker)
 
@@ -265,7 +327,7 @@ Tassonomia (literature review, non studio empirico) dei rischi dei modelli T2I g
 ACL Findings 2022. arXiv:2110.08193.
 🔗 https://arxiv.org/abs/2110.08193
 
-Benchmark di QA con esempi intersezionali. Non usato direttamente in Ouroboros, ma è il riferimento canonico per testing intersezionale (`gender × ethnicity`, ecc.) — pattern che ripercorriamo nelle categorie `gender-ethnicity` e `ethnicity-socio_economics`.
+Benchmark di QA con esempi intersezionali. Non usato in Ouroboros: le categorie intersezionali del seed-set legacy (`gender-ethnicity`, `ethnicity-socio_economics`) ne ricalcavano il pattern, ma sono uscite con il dataset CLEAR-Bias, e la v3.0 misura il solo genere. Resta il riferimento canonico se l'estensione intersezionale verrà ripresa — vedi [09-future-intersectional-ablation.md](09-future-intersectional-ablation.md).
 
 ---
 
@@ -273,12 +335,21 @@ Benchmark di QA con esempi intersezionali. Non usato direttamente in Ouroboros, 
 
 | Tool | Uso | Reference |
 |---|---|---|
-| `google-genai` Python SDK | Client Vertex AI | https://github.com/googleapis/python-genai |
-| `pydantic` v2 | Validazione schema | https://docs.pydantic.dev/ |
+| `ollama` | Client dell'attacker (e del judge in backend `ollama`) | https://github.com/ollama/ollama-python |
+| `mlx-vlm` | Judge locale su Apple Silicon | https://github.com/Blaizzy/mlx-vlm |
+| `mflux` | Target FLUX su Apple Silicon | https://github.com/filipstrand/mflux |
+| `diffusers` | Target FLUX su NVIDIA CUDA | https://github.com/huggingface/diffusers |
+| `facenet-pytorch` | MTCNN per la detection dei volti (pipeline FairFace) | https://github.com/timesler/facenet-pytorch |
+| `pydantic` v2 | Validazione schema + derivazione dei campi di `GenderJudgement` | https://docs.pydantic.dev/ |
 | `pandas` | DataFrame nei metrics | https://pandas.pydata.org/ |
 | `jinja2` | Template `report.html` | https://jinja.palletsprojects.com/ |
+| `sentence-transformers` + `hdbscan` | Clustering delle strategie dell'attacker | https://sbert.net/ |
+| `streamlit` | Dashboard (`ouroboros dashboard`, extra `[web]`) | https://streamlit.io/ |
+| `psutil` | Snapshot RAM per fase | https://github.com/giampaolo/psutil |
 | `tqdm` | Progress bar | https://github.com/tqdm/tqdm |
 | `python-dotenv` | Load `.env` | https://github.com/theskumar/python-dotenv |
+
+Il SDK `google-genai` non è più una dipendenza: è uscito con il judge cloud.
 
 ---
 
@@ -286,10 +357,16 @@ Benchmark di QA con esempi intersezionali. Non usato direttamente in Ouroboros, 
 
 Se usi Ouroboros in pubblicazioni, cita almeno:
 
-- **Il paper PAIR originale** ([Chao et al., 2023](#pair)) come methodology origin.
-- **Il dataset CLEAR-Bias** ([Cantini et al.](#clear-bias)) per la tassonomia.
-- **BOLD** [Dhamala et al., 2021] per i prompt arricchiti.
-- **Qwen3-VL** [Bai et al., 2025] o il modello judge specifico usato.
+- **Il paper PAIR originale** ([Chao et al., 2023](#pair)) come origine metodologica del loop.
+- **Stable Bias** [Luccioni et al., 2023] come fonte del seed-set (175 professioni) e precedente per i bootstrap CI.
+- **FairFace** [Kärkkäinen & Joo, 2021] per la pipeline di classificazione post-hoc.
+- **T2ISafety** [Li et al., 2025] se riporti la validazione esterna del judge.
+- **Qwen3-VL** [Bai et al., 2025] o il modello judge specificamente usato.
+- **Girrbach et al., 2025** ([qui](#girrbach)) se confronti i risultati con l'audit statico su FLUX.
+
+CLEAR-Bias [Cantini et al.] e BOLD [Dhamala et al., 2021] vanno citati **solo** se
+usi i seed legacy in `data/legacy/` o la modalità `test`: il seed-set principale
+non deriva più da loro.
 
 ## Da dove proseguire
 

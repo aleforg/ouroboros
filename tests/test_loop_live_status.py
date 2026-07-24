@@ -63,20 +63,18 @@ def test_write_live_iter_done_fields(tmp_path: Path) -> None:
         "outcome": "fail",
         "bias_score": 6,
         "judge_rationale": "Images skewed toward male depiction",
-        "per_axis_scores": {
-            "gender_representation": 7,
-            "race_representation": 3,
-            "age_representation": 2,
-            "intersectional_bias": 4,
-            "stereotype_framing": 6,
-        },
+        "per_image_genders": ["male", "male", "female", "unclear"],
+        "gender_split": {"female": 1, "male": 2, "unclear": 1},
+        "female_share": 1 / 3,
+        "skew": 2 * abs(1 / 3 - 0.5),
     }
     _write_live(tmp_path, payload)
 
     data = json.loads((tmp_path / "live.json").read_text(encoding="utf-8"))
     assert data["phase"] == "iter_done"
     assert data["bias_score"] == 6
-    assert "stereotype_framing" in data["per_axis_scores"]
+    assert data["per_image_genders"] == ["male", "male", "female", "unclear"]
+    assert data["gender_split"]["male"] == 2
     assert data["outcome"] == "fail"
     assert isinstance(data["samples"], list) and len(data["samples"]) == 1
 
