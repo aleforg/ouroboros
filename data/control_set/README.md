@@ -13,14 +13,42 @@ In git c'è solo questo README.
 | `test.zip` | archivio delle immagini; i path del JSON sono **relativi alla sua radice estratta** | ~373 MB |
 | `evaluator_test/` | risultato dell'estrazione di `test.zip` | ~375 MB |
 
-Fonte: **T2ISafety** (Li et al., CVPR 2025), split *fairness* —
-[paper](https://openaccess.thecvf.com/content/CVPR2025/papers/Li_T2ISafety_Benchmark_for_Assessing_Fairness_Toxicity_and_Privacy_in_Image_Generation_CVPR_2025_paper.pdf).
-Gli artefatti si prendono dal rilascio ufficiale del benchmark su Hugging Face.
+Fonte: **T2ISafety** (Li et al., CVPR 2025), split *fairness/generated* —
+[paper](https://arxiv.org/abs/2501.12612) ·
+[codice](https://github.com/adwardlee/t2i_safety) ·
+[dataset](https://huggingface.co/datasets/OpenSafetyLab/t2i_safety_dataset).
+Licenza **Apache-2.0**.
 
-> **TODO**: annotare qui l'URL esatto del rilascio e lo SHA256 dei due file
-> scaricati, come già facciamo per la reference BLS in
-> `data/raw/bls/manifest.json`. Senza, la validazione del judge non è
-> riproducibile da terzi.
+## Come si scarica
+
+```bash
+huggingface-cli download OpenSafetyLab/t2i_safety_dataset \
+  hf_test_fairness_generated.json test.zip \
+  --repo-type dataset --local-dir data/control_set
+unzip -q data/control_set/test.zip -d data/control_set
+```
+
+Il repo contiene anche gli split `train` e `toxicity_privacy`: a Ouroboros non
+servono, scaricali solo se ti servono per altro.
+
+**Basta molto meno di 373 MB.** I 500 record dello split fairness puntano tutti a
+una sola sottocartella, quindi si può estrarre solo quella (500 file, ~169 MB):
+
+```bash
+unzip -q data/control_set/test.zip \
+  'evaluator_test/version2_fair_toxic_id/gen_fairness_data/*' -d data/control_set
+```
+
+URL esatti, dimensioni e SHA256 sono in [`manifest.json`](manifest.json), sullo
+stesso modello di `data/raw/bls/manifest.json`. **Le due copie locali sono
+verificate contro l'upstream**, non solo hashate in locale: per `test.zip`
+(LFS) l'oid pubblicato *è* uno SHA256 e coincide con quello locale; per il JSON,
+che è un blob git normale, il confronto è sullo SHA-1 del blob. Per ricontrollare:
+
+```bash
+shasum -a 256 data/control_set/test.zip
+git hash-object data/control_set/hf_test_fairness_generated.json
+```
 
 ## Come si usa
 
@@ -75,9 +103,11 @@ L'etichetta umana sta nel turno `assistant` come testo libero a tre righe;
 
 ## `hf_test_fairness_generated_rest.json`
 
-Non è un file del rilascio originale: è un **sottoinsieme locale** del principale
-(id 150–499, 350 record, sovrapposizione totale con il file completo), creato per
-riprendere una validazione interrotta dopo i primi 150 record. Se non ti serve
+**Non è un file del rilascio** — confermato: il repo Hugging Face contiene solo
+`hf_test_{fairness,toxicity_privacy}_{generated,real}.json`, `test.zip` e i
+`train.zip.part-a*`, nessun `_rest`. È un **sottoinsieme locale** del principale
+(id 150–499, 350 record, interamente contenuti nel file completo), creato per
+riprendere una validazione interrotta dopo i primi 150 record. Se non devi
 riprendere quella sessione, ignoralo e usa il file principale.
 
 ## Caveat metodologico

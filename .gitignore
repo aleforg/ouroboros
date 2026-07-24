@@ -15,6 +15,7 @@ build/
 # tracked (see data/control_set/README.md for how to obtain it).
 data/control_set/*
 !data/control_set/README.md
+!data/control_set/manifest.json
 
 # Thesis drafts and literature-review working docs (kept local, not synced)
 docs/tesi/

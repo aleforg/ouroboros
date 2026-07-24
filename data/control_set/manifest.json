@@ -1,0 +1,59 @@
+{
+  "dataset": "T2ISafety — ImageGuard test set, fairness/generated split",
+  "paper": "Li, L., Shi, Z., Hu, X., Dong, B., Qin, Y., Liu, X., Sheng, L., & Shao, J. (2025). T2ISafety: Benchmark for Assessing Fairness, Toxicity, and Privacy in Image Generation. CVPR 2025 / arXiv:2501.12612",
+  "paper_url": "https://arxiv.org/abs/2501.12612",
+  "code_url": "https://github.com/adwardlee/t2i_safety",
+  "huggingface_repo": "OpenSafetyLab/t2i_safety_dataset",
+  "huggingface_url": "https://huggingface.co/datasets/OpenSafetyLab/t2i_safety_dataset",
+  "license": "Apache-2.0",
+  "retrieved": "2026-07",
+  "used_by": "ouroboros validate-judge (src/validate.py) — external validation of the gender judge, RQ1",
+  "verification_note": "Both upstream files were verified against the Hugging Face repository API on 2026-07-24, not merely hashed locally. test.zip is LFS-tracked: its published LFS oid is a SHA256 and matches the local sha256 below exactly, as does the byte size. hf_test_fairness_generated.json is stored as a plain git blob (no LFS oid), so it was verified by its git blob SHA-1 instead — recorded below as git_blob_sha1 and matching the upstream oid. The local copies are therefore bit-identical to the release.",
+  "files": {
+    "data/control_set/hf_test_fairness_generated.json": {
+      "upstream_path": "hf_test_fairness_generated.json",
+      "download_url": "https://huggingface.co/datasets/OpenSafetyLab/t2i_safety_dataset/resolve/main/hf_test_fairness_generated.json",
+      "size_bytes": 317422,
+      "sha256": "88ffc6dd593719799ef9f92263c51fcfe5cf1564460cc93e00904dfc3a0253ce",
+      "git_blob_sha1": "96cda4cb5b3c7462d9cfd4905559a4c79aaf7efd",
+      "upstream_oid_kind": "git-blob-sha1",
+      "upstream_oid": "96cda4cb5b3c7462d9cfd4905559a4c79aaf7efd",
+      "verified": true
+    },
+    "data/control_set/test.zip": {
+      "upstream_path": "test.zip",
+      "download_url": "https://huggingface.co/datasets/OpenSafetyLab/t2i_safety_dataset/resolve/main/test.zip",
+      "size_bytes": 391235031,
+      "sha256": "1ce59ada170846913f0e645f43b957704f6a3427c9381567b687e339b40dc6f0",
+      "upstream_oid_kind": "lfs-sha256",
+      "upstream_oid": "1ce59ada170846913f0e645f43b957704f6a3427c9381567b687e339b40dc6f0",
+      "verified": true,
+      "note": "Extracted in place to evaluator_test/. The fairness/generated split references exactly one subdirectory, evaluator_test/version2_fair_toxic_id/gen_fairness_data (500 files, ~169 MB), so a partial extraction of that path is sufficient for validate-judge."
+    }
+  },
+  "local_artifacts": {
+    "data/control_set/hf_test_fairness_generated_rest.json": {
+      "size_bytes": 141885,
+      "sha256": "c25754014e7fe76eed8147be2ece82a21de17ab036bf0fe8846024dad26956e5",
+      "upstream": false,
+      "note": "NOT part of the release. Local subset of hf_test_fairness_generated.json (ids 150-499, 350 records, fully contained in the main file), left over from resuming an interrupted validation run. Reproduce with: python -c \"import json;d=json.load(open('hf_test_fairness_generated.json'));json.dump([x for x in d if x['id']>=150],open('hf_test_fairness_generated_rest.json','w'))\" — note the byte-exact file depends on json.dump formatting, so the sha256 above is informational only."
+    }
+  },
+  "split_composition": {
+    "n_records": 500,
+    "n_usable": 500,
+    "n_skipped_unparseable_or_missing_image": 0,
+    "gt_gender": {"male": 264, "female": 236},
+    "all_generated": true,
+    "source_models": {
+      "sd-xl-lightening": 116,
+      "pixart-a": 112,
+      "sd-1-5": 87,
+      "playground-v2-5": 83,
+      "sd-2-1": 68,
+      "sd-xl": 34
+    },
+    "composition_note": "Counts computed from the local copy on 2026-07-24 by applying the same filters as load_t2isafety_control (drop real=true, require parseable gender/race/age, require an image path). No source model is FLUX, so the judge is validated out of distribution with respect to the target it judges in a run."
+  },
+  "caveat": "T2ISafety publishes no inter-annotator agreement for the fairness split. The judge's Cohen kappa against these labels therefore has no known ceiling to be read against: it measures agreement with this annotation, not with ground truth."
+}
