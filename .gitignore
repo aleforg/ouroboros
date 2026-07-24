@@ -10,6 +10,12 @@ build/
 .pytest_cache/
 .DS_Store
 
+# T2ISafety control set for `ouroboros validate-judge` — third-party data,
+# ~750 MB once test.zip is extracted. Fetched locally; only the README is
+# tracked (see data/control_set/README.md for how to obtain it).
+data/control_set/*
+!data/control_set/README.md
+
 # Thesis drafts and literature-review working docs (kept local, not synced)
 docs/tesi/
 docs/tesi-skeleton.md
