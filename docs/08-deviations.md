@@ -348,9 +348,9 @@ Ouroboros v2.5: full dataset = `data/stable_bias_prompts.jsonl` (175 prompts, St
 
 ---
 
-### A.16 Attivazione di `stereotype_framing`: success rule OR + ritorno nel report ✦ AGGIORNATO (v2.6) → ⚠️ SUPERATO da A.17
+### A.16 Attivazione di `stereotype_framing`: success rule OR + ritorno nel report ✦ AGGIORNATO (v2.6) → ⚠️ SUPERATO da A.17, poi da §0.1–0.2
 
-> **Superato in v2.7 (A.17)**: la branch OR su `stereotype_framing` è stata **rimossa** dalla success rule. La descrizione qui sotto resta come storico; per il comportamento attuale vedi A.17.
+> **Superato due volte.** In v2.7 (A.17) la branch OR su `stereotype_framing` è stata rimossa dalla success rule; in v3.0 (§0.1) l'asse stesso ha cessato di esistere insieme all'intera rubrica multi-asse. La descrizione qui sotto resta come storico e **non descrive il codice corrente**.
 
 In v2.2 (A.12) i `per_axis_scores` del judge erano stati estromessi dal report a favore delle metriche FairFace + KL, e la nota dichiarava che alimentavano la success rule — ma il codice in realtà **non** li usava: `_success_rule` leggeva solo `per_image_scores`. `stereotype_framing` veniva calcolato, pagato (token del judge), salvato in `run.jsonl` e poi mai usato. Questa deviazione allinea il codice a quell'intento e chiude lo scollamento.
 
@@ -367,7 +367,9 @@ In v2.2 (A.12) i `per_axis_scores` del judge erano stati estromessi dal report a
 
 **Codice**: `src/config.py` (`ModeBudget.stereotype_threshold`), `src/loop.py` (`_success_rule` + call site + stringa `success_rule`), `src/metrics.py` (`per_axis_summary`), `src/report.py` (`_pivot_axis_summary`, wiring, `per_axis.csv`), `src/templates/report.html.j2` (sezione per-asse); test: `tests/test_loop_success_rule.py` (+6), `tests/test_metrics.py` (+2). Suite 114/114 verde.
 
-### A.17 Success rule visual-only + FairFace appaiato baseline-vs-iterative ✦ AGGIORNATO (v2.7)
+### A.17 Success rule visual-only + FairFace appaiato baseline-vs-iterative ✦ AGGIORNATO (v2.7) → ⚠️ SUPERATO da §0.2
+
+> **Superato in v3.0 (§0.2)**: la success rule non opera più su `per_image_scores` con soglia, ma sulla maggioranza delle etichette di genere; `bias_threshold` non esiste più. Anche la simmetria del confronto FairFace descritta qui va corretta — vedi [06-metrics.md](06-metrics.md) §6.1. Quanto segue resta come storico.
 
 Revisione della A.16. La branch OR su `stereotype_framing` viene **rimossa** dal criterio di successo del loop, che torna **visual-only** (sola N-of-M sui `per_image_scores`). In parallelo, il confronto FairFace/KL diventa **appaiato e simmetrico** (baseline vs batch terminale iterativa).
 
@@ -386,7 +388,9 @@ Revisione della A.16. La branch OR su `stereotype_framing` viene **rimossa** dal
 
 **Codice**: `src/loop.py` (`_success_rule` + call site + stringa), `src/config.py` (commento `stereotype_threshold`), `src/metrics/__init__.py` (`baseline_vs_iterative` + helper `_n_of_m`/`_max_score`), `src/fairface.py` (`_load_image_index(selection=)`, `process_run(selection=)`, `load_fairface(filename=)`), `src/report.py` (`_success_params`, `_terminal_run_subset`, `_kl_delta`, `_run_fairface_pipeline`, wiring + nuovi CSV), `src/templates/report.html.j2` (sezioni Visual ASR + FairFace Δ KL), `src/web/pages/3_Results.py`; test: `tests/test_loop_success_rule.py`, `tests/test_metrics.py`, `tests/test_fairface.py`. Suite 226/226 verde.
 
-### A.18 `validate-judge` implementato su control set T2ISafety ✦ NUOVO (v2.8)
+### A.18 `validate-judge` implementato su control set T2ISafety ✦ NUOVO (v2.8) → ristretto al genere in §0.5
+
+> **Nota v3.0**: il comando resta, ma il judge classifica solo il genere (§0.1), quindi la validazione copre il solo asse gender. Le parti che seguono su etnia ed età descrivono la versione v2.8.
 
 Lo stub `validate-judge` (che stampava *"not implemented in v1"*, vedi §B.3) è sostituito da una validazione reale del judge contro il benchmark esterno **T2ISafety** (Li et al., CVPR 2025), human-annotated e apache-2.0 — così nessuna annotazione manuale è richiesta. Risponde al gap (c) ("assenza di validazione del judge"): il judge VLM **legge** genere/etnia/età come gli annotatori umani?
 

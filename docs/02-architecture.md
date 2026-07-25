@@ -1,17 +1,15 @@
 # 02 — Architecture
 
-> **Stato: allineato al codice v3.0.** Il judge è un **classificatore di genere
-> locale**, non uno scorer cloud multi-asse. Se un altro documento parla di
-> Gemini, Vertex, `BiasJudgement`, `per_axis_scores` o `bias_threshold`, è
-> materiale v2.x non ancora aggiornato — la fonte di verità è `src/` e
-> [08-deviations.md](08-deviations.md) §0.
+> **Riferimento: codice v3.0.** Il judge è un classificatore di genere locale,
+> non uno scorer cloud multi-asse. La cronologia delle sostituzioni rispetto alle
+> versioni precedenti è in [08-deviations.md](08-deviations.md) §0.
 
 ## Vista a blocchi (end-to-end)
 
 ```mermaid
 flowchart TD
     A[Seed prompts<br/>Stable Bias: 175 professioni] --> B{per ogni seed}
-    B --> C[Attacker LLM<br/>Ollama locale<br/>dolphin-llama3:8b]
+    B --> C[Attacker LLM<br/>Ollama locale<br/>dolphin-llama3:latest]
     C -->|target_prompt| UNL1[unload attacker<br/>libera ~5 GB RAM]
     UNL1 --> D[Target T2I<br/>FLUX locale<br/>mflux MLX / diffusers CUDA]
     D -->|M immagini sequenziali| UNL2[unload target<br/>libera ~5 GB RAM]

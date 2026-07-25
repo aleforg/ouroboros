@@ -1,6 +1,10 @@
 # 09 — Future work: Intersectional bias ablation
 
-> **Stato**: Piano deferred. Non implementato in v2.5. Da decidere se eseguire dopo aver visto i risultati di v2.5 sul backbone Stable Bias / professions.
+> **Stato**: piano deferred, non implementato. L'esecuzione è subordinata ai
+> risultati del backbone Stable Bias / professions e alle condizioni elencate in
+> "Precondizioni per l'implementazione". Con la riduzione di scope della v3.0
+> ([08-deviations.md](08-deviations.md) §0.7) l'analisi intersezionale è
+> classificata come lavoro futuro, fuori dai claim primari.
 
 ## Motivazione
 
@@ -18,7 +22,7 @@ Crenshaw (1989) e tutta la fairness literature moderna (Buolamwini & Gebru 2018,
 
 ### Scope
 
-Selezionare **10 occupazioni high-skew** identificate nei risultati v2.5 (quelle con KL_gender e/o KL_race più alti — top 10 per skew totale o per leader pubblico-interesse: `CEO`, `nurse`, `software_developer`, `janitor`, `housekeeper`, `pilot`, `firefighter`, `teacher`, `librarian`, `construction_worker`).
+Selezionare **10 occupazioni high-skew** identificate nei risultati del backbone single-axis (quelle con KL_gender e/o KL_race più alti — top 10 per skew totale o per leader pubblico-interesse: `CEO`, `nurse`, `software_developer`, `janitor`, `housekeeper`, `pilot`, `firefighter`, `teacher`, `librarian`, `construction_worker`).
 
 Per ognuna, generare un sub-set di **prompt demograficamente specificati**:
 
@@ -49,7 +53,7 @@ Ogni seed intersezionale avrebbe:
 - `seed_id`: `sb-prof-int-{occ}-{gender}-{race}` (es. `sb-prof-int-ceo-female-black`)
 - `category`: `"profession-intersection"`
 - `base_scene`: il prompt esplicito
-- `source_text`: la profession key originale (per join con i risultati v2.5)
+- `source_text`: la profession key originale (per join con i risultati del backbone)
 
 ### Metrica dedicata
 
@@ -92,10 +96,12 @@ Nuovo modulo `src/metrics_intersectional.py` con `faithfulness_rate()` (riusa `f
 
 ### Costi
 
-- Generazione: 100 prompt × M=4 imgs × ~10s = ~1.1 h di FLUX
-- Judge calls: ~100 × ~3s = 5 min (Gemini cloud)
-- Effort sviluppo: ~1-2 giornate (nuovo loader, nuova metrica, nuovo report section)
-- Effort scrittura tesi: 1 capitolo dedicato (~5-8 pagine)
+- Generazione: 100 prompt × M=4 immagini × ~10 s ≈ 1.1 h di FLUX
+- Judge: ~100 chiamate al VLM locale; il costo dominante è il caricamento del
+  modello per fase, non la singola inferenza (vedi
+  [02-architecture.md](02-architecture.md), gestione RAM)
+- Sviluppo: ~1–2 giornate (nuovo loader, nuova metrica, nuova sezione di report)
+- Stesura: un capitolo dedicato (~5–8 pagine)
 
 ### Risultati attesi (per orientamento)
 
@@ -104,15 +110,22 @@ Letteratura suggerisce:
 - **Bias non-additivo**: `Latina female engineer` tipicamente produce immagini più stereotipiche rispetto a `engineer` + `Latina female` sommati indipendentemente (Mandal et al. 2023)
 - **Refusal asimmetrico**: alcune intersezioni triggernno safety filter (es. `young black male X` ha refusal rate più alto di `young white male X`) — fenomeno documentato in Adversarial Nibbler (Quaye et al. FAccT 2024)
 
-## Trigger per implementare
+## Precondizioni per l'implementazione
 
-Esegui questa ablation **dopo** che la baseline v2.5 ha prodotto risultati solidi, e **solo se**:
+L'ablation presuppone una baseline già consolidata sul backbone single-axis. Le
+condizioni che la rendono sensata sono tre, tutte necessarie:
 
-- Hai trovato 10+ occupazioni con KL skew significativo (> 0.3 nats) nella baseline → vale la pena studiarne il comportamento intersezionale
-- Hai 2+ giornate per implementazione + run + analisi
-- Vuoi un secondo contributo metodologico oltre al framework PAIR iterativo
+1. **Segnale sufficiente nella baseline** — almeno 10 occupazioni con KL skew
+   significativo (> 0.3 nats). Sotto questa soglia il comportamento
+   intersezionale non ha una base single-axis con cui essere confrontato.
+2. **Budget di calcolo e di analisi** nell'ordine di 2+ giornate tra
+   implementazione, run e interpretazione.
+3. **Spazio per un secondo contributo metodologico** accanto al framework PAIR
+   iterativo, che resta il contributo principale.
 
-In tesi, l'ablation intersezionale risponde alla domanda chiusa **"il bias PAIR-amplified è additivo o moltiplicativo lungo le intersezioni demografiche?"** — domanda che la letteratura T2I-bias non ha ancora risposto sistematicamente.
+La domanda a cui l'ablation risponde è chiusa e non ancora affrontata
+sistematicamente dalla letteratura T2I-bias: **il bias amplificato dal loop è
+additivo o moltiplicativo lungo le intersezioni demografiche?**
 
 ## Riferimenti
 
@@ -121,11 +134,11 @@ In tesi, l'ablation intersezionale risponde alla domanda chiusa **"il bias PAIR-
 - Luccioni et al. (2023). Stable Bias — supplement intersectional analysis. NeurIPS 2023 D&B.
 - Hall et al. (2023). VisoGender. arXiv:2306.12424.
 - Bianchi et al. (2023). Easily Accessible T2I Amplifies Stereotypes. FAccT 2023.
-- Mandal et al. (2023). Multidimensional Demographic Bias in T2I. (cite when locating)
+- Mandal et al. (2023). Multidimensional Demographic Bias in T2I. *(riferimento bibliografico completo non ancora reperito; non citabile in questa forma)*
 - Quaye et al. (2024). Adversarial Nibbler. FAccT 2024.
 
 ## Da dove proseguire
 
-→ [05-dataset.md](05-dataset.md) — descrizione del dataset backbone v2.5
+→ [05-dataset.md](05-dataset.md) — descrizione del dataset backbone
 → [06-metrics.md](06-metrics.md) — metriche correnti, su cui costruire `faithfulness_rate`
 → [08-deviations.md §A.15](08-deviations.md) — perché siamo arrivati a questo dataset

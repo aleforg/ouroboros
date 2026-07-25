@@ -206,8 +206,9 @@ with Path('data/stable_bias_prompts.jsonl').open('w') as f:
                             'source_dataset': 'tti-bias/professions'}) + '\n')
 print(f'Wrote {len(profs)} prompts')
 "
-# Lo script scarica temporaneamente ~3 GB di immagini in ~/.cache/huggingface/
-# che puoi liberare dopo con: rm -rf ~/.cache/huggingface/datasets/tti-bias___professions
+# Lo script scarica temporaneamente ~3 GB di immagini in ~/.cache/huggingface/.
+# La cache è liberabile a fine esecuzione:
+#   rm -rf ~/.cache/huggingface/datasets/tti-bias___professions
 ```
 
 Dipendenze: `datasets>=2.14` (già in `pyproject.toml`).

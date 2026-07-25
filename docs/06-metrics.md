@@ -1,10 +1,10 @@
 # 06 — Metrics & Strategy Clustering
 
-> **Stato: allineato al codice v3.0.** Non esistono più `per_axis.csv`,
-> `stereotype_elicitation.csv` (SER/SRG), `intra_batch_variance.csv`,
-> `bias_threshold` né alcun punteggio 0–10 prodotto dal VLM. Se trovi quei nomi
-> altrove nei `docs/`, è materiale v2.x non aggiornato: la fonte di verità è
-> `src/metrics/` e [08-deviations.md](08-deviations.md) §0.
+> **Riferimento: codice v3.0.** L'insieme delle metriche non comprende più
+> `per_axis.csv`, `stereotype_elicitation.csv` (SER/SRG),
+> `intra_batch_variance.csv`, `bias_threshold` né alcun punteggio 0–10 prodotto
+> dal VLM. Le rimozioni e le loro motivazioni sono documentate in
+> [08-deviations.md](08-deviations.md) §0.5.
 
 Tutte le metriche sono calcolate **post-hoc** da `run.jsonl` (e opzionalmente
 `baseline.jsonl`). Il comando `ouroboros report <run_id>` produce CSV + un
@@ -303,10 +303,10 @@ FairFace ResNet-34 (Karkkainen & Joo, WACV 2021) fornisce una **seconda misura,
 indipendente dal judge**, sulle stesse immagini. Serve a due scopi: la validità
 convergente di §7 e un'analisi esplorativa su assi che il judge non guarda.
 
-> **Ambito.** Solo l'asse **gender** è dentro i claim primari della tesi. Race e
-> age vengono classificati gratis dalla stessa forward pass e sono conservati
-> come **appendice esplorativa senza claim** — il judge non li misura e
-> l'attacker non li ottimizza. Vedi [08-deviations.md](08-deviations.md) §0.7.
+> **Ambito.** Solo l'asse **gender** rientra nei claim primari. Race e age sono
+> prodotti dalla stessa forward pass a costo nullo e vengono conservati come
+> materiale esplorativo privo di claim: il judge non li misura e l'attacker non
+> li ottimizza. Vedi [08-deviations.md](08-deviations.md) §0.7.
 
 | Asse | K (bucket) | Etichette |
 |---|---|---|
@@ -372,17 +372,18 @@ riclassificazione, nessuna GPU — e scrive
 `report/fairface_robustness.json`. È deterministico: rieseguirlo sullo stesso
 run riproduce le stesse cifre.
 
-I numeri riportati qui vengono dal run **`2026-07-16_191548_eb25e79c`** (full
+I valori riportati provengono dal run **`2026-07-16_191548_eb25e79c`** (full
 mode, 175 seed, M=8, baseline `matched`, target `diffusers`, judge `ollama`),
-verificati il 2026-07-24. Su un altro run cambieranno: sono un caso
-dimostrativo del meccanismo, non costanti del framework. **Rigenerali prima di
-citarli in tesi.**
+verificati il 2026-07-24. Sono un **caso dimostrativo del meccanismo, non
+costanti del framework**: su un altro run le cifre cambiano, mentre il
+meccanismo che illustrano resta. Qualunque uso esterno di questi valori richiede
+quindi una rigenerazione sul run di riferimento.
 
-Attenzione a una distinzione che le tabelle sotto tengono separata: `skew` **del
-judge** e `skew` **di FairFace** sono due misure di strumenti diversi sulle
-stesse immagini. Il primo è per batch sulle etichette del judge (ed è quello su
-cui operano success rule e ABS); il secondo è per seed sulle facce rilevate. Non
-vanno mescolati in una sola colonna.
+Le tabelle che seguono tengono separati due indicatori omonimi ma distinti:
+`skew` **del judge** e `skew` **di FairFace** sono misure di strumenti diversi
+sulle stesse immagini. Il primo è per batch sulle etichette del judge, ed è
+quello su cui operano success rule e ABS; il secondo è per seed sulle facce
+rilevate. Non sono commensurabili e non appartengono alla stessa colonna.
 
 ### 6.1 Trappola 1 — il confronto baseline/iterative NON è simmetrico
 
@@ -400,9 +401,9 @@ seed: 1400 ↔ 1400. Rifatto così, il Δ KL medio sulle categorie si muove appe
 | race | −0.5899 | −0.5614 |
 | age | −0.3900 | −0.3923 |
 
-**L'asimmetria non spiega i risultati** — ma la tabella così com'è non va citata
-come "appaiata", ed è per questo che il docstring di `_run_fairface_pipeline` è
-stato corretto.
+**L'asimmetria non spiega i risultati**, ma la tabella nella forma pubblicata
+non costituisce un confronto appaiato: il docstring di
+`_run_fairface_pipeline` è stato corretto di conseguenza.
 
 ### 6.2 Trappola 2 — la KL per categoria annulla gli skew opposti
 
@@ -420,17 +421,18 @@ media per-seed dello skew di batch):
 | `male_coded` | 55 | 0.1279 | 0.3081 | 0.9448 | 2 all-F + 44 all-M + 9 misti |
 | `balanced` | 61 | 0.2482 | 0.1318 | 0.9303 | 9 all-F + 41 all-M + 11 misti |
 
-Leggi la riga `female_coded`: la KL di categoria dice **0.0014**, cioè
-"distribuzione praticamente uniforme, nessuno sbilanciamento", mentre **48 seed
-su 59** hanno la batch terminale interamente di un solo genere — solo che 29
-vanno verso female e 19 verso male, e nell'aggregato si annullano.
+La riga `female_coded` è il caso limite: la KL di categoria vale **0.0014**,
+cioè distribuzione praticamente uniforme e nessuno sbilanciamento apparente,
+mentre **48 seed su 59** hanno la batch terminale interamente di un solo
+genere. Di questi, 29 convergono verso female e 19 verso male, e nell'aggregato
+si annullano a vicenda.
 
-Lo stesso meccanismo è visibile **anche restando dentro FairFace**, il che
+Lo stesso meccanismo si osserva **anche restando dentro FairFace**, il che
 esclude che sia un artefatto del judge: calcolando lo skew per seed sulle facce
 FairFace invece che sulle etichette del judge, `female_coded` dà `mean |skew|`
 **0.7078** con 24 seed su 58 mono-genere, contro una KL pooled di 0.0014. Il
 valore è più basso di quello del judge perché le scene di gruppo diluiscono la
-purezza per-seed (§ limitazioni sotto), ma la direzione è la stessa.
+purezza per-seed (vedi le limitazioni più sotto), ma la direzione è la stessa.
 
 Non è quindi un disaccordo tra judge e FairFace sul costrutto: è un **artefatto
 di aggregazione** che colpisce qualunque strumento si usi, purché si pooli per
@@ -487,24 +489,25 @@ al. 2024).
   con tutti i paper T2I-fairness recenti.
 - FairFace ha bias residui di campionamento propri.
 - Con più persone nell'immagine **ogni faccia contribuisce indipendentemente**
-  alla distribuzione empirica — coerente con Stable Bias, ma va ricordato che i
-  prompt avversari producono più scene di gruppo dei prompt neutri. Misurato sul
-  run `2026-07-16_191548_eb25e79c` (stesso script di §6.1):
+  alla distribuzione empirica. La scelta è coerente con Stable Bias, ma
+  interagisce con una proprietà dei prompt avversari: producono più scene di
+  gruppo dei prompt neutri. Misurato sul run `2026-07-16_191548_eb25e79c` con lo
+  stesso script di §6.1:
 
   | | facce per immagine generata | quota immagini con ≥1 volto | immagini a volto singolo |
   |---|---|---|---|
   | baseline | 1.006 | 100.0% | 1885 / 1896 |
   | iterative (terminale) | 1.302 | 90.2% | 926 / 1400 |
 
-  Due asimmetrie in una: il lato iterativo ha **più volti per immagine** e
-  **più immagini senza alcun volto**. Era un candidato confondente naturale per
-  i Δ KL su race/age — se le scene di gruppo appiattiscono le distribuzioni, il
-  calo di KL potrebbe essere composizione della scena, non demografia.
-  **Controllato: non lo spiega.** Restringendo *entrambi* i lati alle sole
-  immagini a volto singolo, il Δ KL medio resta: gender −0.1185 (da −0.1203),
-  race −0.5748 (da −0.5899), age −0.3434 (da −0.3900). L'asse `age` è quello
-  che si muove più degli altri (~12% relativo), quindi è l'unico su cui questo
-  controllo va citato accanto al valore principale.
+  Sono due asimmetrie sovrapposte: il lato iterativo ha **più volti per
+  immagine** e **più immagini senza alcun volto**. Questo costituisce un
+  confondente candidato per i Δ KL su race/age — se le scene di gruppo
+  appiattiscono le distribuzioni, il calo di KL sarebbe composizione della scena
+  e non demografia. Il controllo esclude l'ipotesi: restringendo *entrambi* i
+  lati alle sole immagini a volto singolo, il Δ KL medio resta gender −0.1185
+  (da −0.1203), race −0.5748 (da −0.5899), age −0.3434 (da −0.3900). L'asse
+  `age` è il più sensibile al controllo (~12% relativo), ed è quindi il solo per
+  cui il valore sotto controllo va riportato accanto a quello principale.
 
 ## 7. Judge ↔ FairFace agreement (validità convergente)
 
@@ -583,8 +586,8 @@ convergente, complementare — non sostitutiva — alla validazione esterna cont
 ground truth umana, che è `ouroboros validate-judge` sul control set T2ISafety
 (accuracy, macro-F1, κ, matrice di confusione, invalid-prediction rate,
 accuratezza per sottogruppo). Vedi [08-deviations.md](08-deviations.md) A.18.
-Nota che T2ISafety non pubblica inter-annotator agreement per la fairness, il
-che pone un tetto a quanto quella validazione può dire.
+T2ISafety non pubblica inter-annotator agreement per la fairness, il che pone un
+tetto a quanto quella validazione possa dimostrare.
 
 ## 8. BLS gender alignment (esplorativa, dietro `--bls`)
 
@@ -763,11 +766,11 @@ segnala che l'attacker produce strategie *idiosincratiche* fuori pattern.
 (`src/cluster.py`) e tutte le label finiscono in `unclustered`. In modalità
 `test` (10 seed, max_iter=5) è di fatto disabilitato.
 
-> **Caveat**: `E(s)` va letta con l'ASR vicina. Quando l'ASR complessiva è ~100%
-> (come nel run full) quasi ogni strategia "funziona", e il differenziale tra
-> cluster diventa poco informativo. In quel regime la domanda interessante si
-> sposta su *quante iterazioni* serve una famiglia di strategie, non *se*
-> riesce.
+> **Caveat**: `E(s)` è interpretabile solo accanto all'ASR complessiva. Quando
+> questa è ~100% (come nel run full) quasi ogni strategia "funziona" e il
+> differenziale tra cluster perde potere informativo. In quel regime la
+> discriminante non è *se* una famiglia di strategie riesce, ma in *quante
+> iterazioni*.
 
 ## 12. Report finale
 
@@ -802,10 +805,10 @@ script di analisi e citati in questo documento:
 | `fairface_robustness.json` | `scripts/fairface_robustness_checks.py` | i controlli di §6.1–6.2: asimmetria baseline/iterative, cancellazione da pooling, controllo a volto singolo |
 | `judge_fairface_scatter_stats.json` + i due `judge_fairface_gender_scatter*.png/.pdf` | `scripts/plot_judge_fairface_scatter.py` | figura e statistiche dell'accordo per-seed di §7 |
 
-Sono fuori da `run_report` perché rispondono a domande di robustezza poste una
-volta, non a metriche da ricalcolare a ogni run — ma sono script versionati e
-deterministici, non analisi ad hoc: ogni numero che questo documento cita si
-rigenera da lì.
+La separazione da `run_report` è deliberata: rispondono a controlli di
+robustezza una tantum, non a metriche da ricalcolare a ogni run. Restano
+comunque script versionati e deterministici, quindi ogni valore citato in questo
+documento è rigenerabile.
 
 `report.html` è **self-contained**: thumbnail in base64 inline e chart ASR-vs-iter
 come **SVG inline** (no PNG, no chart.js, zero dipendenze esterne).
@@ -833,7 +836,7 @@ results/aggregate_<timestamp>/
 | Baseline vs iterative ASR / mean-max-skew | globale | `metrics.baseline_vs_iterative` | Quanto aggiunge il loop iterativo, a parità di budget? |
 | **Judge↔FairFace Cohen's κ** (gender) | per immagine | `metrics.agreement.judge_fairface_gender_agreement` | Judge e classificatore standard classificano la stessa faccia allo stesso modo? *(RQ1)* |
 | Judge↔FairFace Spearman ρ (gender) | per seed | `metrics.agreement.judge_fairface_axis_spearman` | Ordinano i seed allo stesso modo? |
-| KL(p_emp ‖ U) + norm_entropy (FairFace) | per categoria | `fairface.compute_kl_metrics` | Quanto è uniforme la popolazione generata? *(vedi §6.2 prima di citarla)* |
+| KL(p_emp ‖ U) + norm_entropy (FairFace) | per categoria | `fairface.compute_kl_metrics` | Quanto è uniforme la popolazione generata nel suo insieme? *(soggetta alla cancellazione descritta in §6.2)* |
 | FairFace Δ KL baseline→iterative | per categoria × asse | `report._kl_delta` | Quanto l'attacker sposta la distribuzione aggregata? *(esplorativa)* |
 | BLS gender alignment | per gruppo BLS | `metrics.fairness.bls_gender_alignment_summary` | Quanto la quota generata si allinea alla forza lavoro US 2022? *(dietro `--bls`)* |
 | Refusal rate | per categoria | `metrics.per_category` | Quanto sono attivi i safety filter del target? |

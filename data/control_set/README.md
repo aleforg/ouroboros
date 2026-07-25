@@ -28,8 +28,8 @@ huggingface-cli download OpenSafetyLab/t2i_safety_dataset \
 unzip -q data/control_set/test.zip -d data/control_set
 ```
 
-Il repo contiene anche gli split `train` e `toxicity_privacy`: a Ouroboros non
-servono, scaricali solo se ti servono per altro.
+Il repo contiene anche gli split `train` e `toxicity_privacy`, non usati da
+Ouroboros.
 
 **Basta molto meno di 373 MB.** I 500 record dello split fairness puntano tutti a
 una sola sottocartella, quindi si può estrarre solo quella (500 file, ~169 MB):
@@ -43,7 +43,8 @@ URL esatti, dimensioni e SHA256 sono in [`manifest.json`](manifest.json), sullo
 stesso modello di `data/raw/bls/manifest.json`. **Le due copie locali sono
 verificate contro l'upstream**, non solo hashate in locale: per `test.zip`
 (LFS) l'oid pubblicato *è* uno SHA256 e coincide con quello locale; per il JSON,
-che è un blob git normale, il confronto è sullo SHA-1 del blob. Per ricontrollare:
+che è un blob git normale, il confronto è sullo SHA-1 del blob. La verifica è
+ripetibile con:
 
 ```bash
 shasum -a 256 data/control_set/test.zip
@@ -107,8 +108,8 @@ L'etichetta umana sta nel turno `assistant` come testo libero a tre righe;
 `hf_test_{fairness,toxicity_privacy}_{generated,real}.json`, `test.zip` e i
 `train.zip.part-a*`, nessun `_rest`. È un **sottoinsieme locale** del principale
 (id 150–499, 350 record, interamente contenuti nel file completo), creato per
-riprendere una validazione interrotta dopo i primi 150 record. Se non devi
-riprendere quella sessione, ignoralo e usa il file principale.
+riprendere una validazione interrotta dopo i primi 150 record. Non è necessario
+per una validazione completa, che usa il file principale.
 
 ## Caveat metodologico
 

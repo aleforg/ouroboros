@@ -1,9 +1,9 @@
 # 01 — Overview
 
-> **Stato: allineato al codice v3.0.** Il judge è un **classificatore di genere
-> locale**; non esiste più il judge cloud. Vedi
-> [08-deviations.md](08-deviations.md) §0 per la riduzione di scope decisa a
-> luglio 2026.
+> **Riferimento: codice v3.0.** Il judge è un classificatore di genere locale;
+> il judge cloud delle versioni precedenti non fa più parte del framework. La
+> riduzione di scope di luglio 2026 è documentata in
+> [08-deviations.md](08-deviations.md) §0.
 
 ## Cos'è Ouroboros
 
@@ -98,13 +98,13 @@ unificata** (M4 baseline). Tutti e tre gli attori sono locali, quindi la RAM è
 *il* vincolo di progetto.
 
 ```
-┌─────────────── 16 GB unified memory ───────────────┐
-│  ~3 GB  macOS + browser + IDE                      │
-│  ~5 GB  attacker LLM   (Ollama, dolphin-llama3:8b) │
-│  ~5 GB  target T2I     (FLUX.2-klein-4B via mflux) │
-│  ~5 GB  judge VLM      (Qwen3-VL-8B-4bit, locale)  │
-└─────────────────────────────────────────────────────┘
-        i tre modelli NON sono mai residenti insieme
+┌──────────────── 16 GB unified memory ─────────────────┐
+│  ~3 GB  macOS + browser + IDE                         │
+│  ~5 GB  attacker LLM  (Ollama, dolphin-llama3)        │
+│  ~5 GB  target T2I    (FLUX.2-klein-4B via mflux)     │
+│  ~5 GB  judge VLM     (Qwen3-VL-8B-4bit, locale)      │
+└───────────────────────────────────────────────────────┘
+         i tre modelli non sono mai residenti insieme
 ```
 
 La somma sforerebbe i 16 GB: il framework non ci prova nemmeno. Le tre fasi sono

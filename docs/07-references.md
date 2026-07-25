@@ -2,11 +2,11 @@
 
 Bibliografia ragionata delle fonti accademiche e tecniche dietro al framework. Suddiviso per area concettuale.
 
-> **Stato: allineato al codice v3.0.** Il judge è **locale** (Qwen3-VL-8B via
-> MLX o Ollama); il judge cloud Gemini/Vertex non esiste più. Il seed-set è
-> **Stable Bias** (175 professioni); CLEAR-Bias × BOLD è archiviato in
-> `data/legacy/` e resta qui per la genealogia del progetto. Vedi
-> [08-deviations.md](08-deviations.md) §0.
+> **Riferimento: codice v3.0.** Il judge è locale (Qwen3-VL-8B via MLX o
+> Ollama); il judge cloud Gemini/Vertex non fa più parte del framework. Il
+> seed-set è Stable Bias (175 professioni). Le voci su CLEAR-Bias e BOLD
+> descrivono il seed-set storico, archiviato in `data/legacy/`, e sono conservate
+> per la genealogia del progetto. Vedi [08-deviations.md](08-deviations.md) §0.
 
 ---
 
