@@ -14,6 +14,7 @@ from pathlib import Path
 import streamlit as st
 
 from ouroboros.config import RAM_BUDGET_GB
+from ouroboros.judge import gender_counts
 from ouroboros.web.charts import ram_summary
 from ouroboros.web.data import (
     get_results_dir,
@@ -265,7 +266,6 @@ def _render_current_iteration(run_dir: Path, meta: dict) -> None:
                     st.metric("gender skew (0–10)", last_bias)
                 if last_split:
                     if isinstance(last_split, list):
-                        from ouroboros.judge import gender_counts
                         n_f, n_m, n_u = gender_counts([str(x) for x in last_split])
                         last_split = f"{n_m}M/{n_f}F/{n_u}U"
                     st.caption(f"♀♂ gender split: {last_split}")

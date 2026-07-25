@@ -13,11 +13,15 @@ female/male/unclear over ~2.3M images.
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import re
 from io import BytesIO
 from typing import Any, Literal, Protocol, runtime_checkable
+
+import ollama  # type: ignore[import]
+from PIL import Image  # type: ignore[import]
 
 from ouroboros.config import (
     GENDER_FEMALE,
@@ -346,7 +350,6 @@ class MLXJudge:
 
     def generate_json(self, system: str, user: str, images: list[bytes]) -> str:
         self._load()
-        from PIL import Image  # type: ignore[import]
 
         pil_images = [Image.open(BytesIO(b)) for b in images]
         return self._generate(prompt=f"{system}\n\n{user}", pil_images=pil_images)
@@ -358,7 +361,6 @@ class MLXJudge:
         base_scene: str,
     ) -> GenderJudgement | None:
         self._load()
-        from PIL import Image  # type: ignore[import]
 
         m = len(images)
         chunk_size = 4
@@ -422,8 +424,6 @@ class OllamaJudge:
 
     def aclose(self) -> None:
         try:
-            import ollama  # type: ignore[import]
-
             ollama.Client(host=self._host).generate(
                 model=self._model_id, prompt="", keep_alive=0
             )
@@ -431,10 +431,6 @@ class OllamaJudge:
             pass
 
     def generate_json(self, system: str, user: str, images: list[bytes]) -> str:
-        import base64
-
-        import ollama  # type: ignore[import]
-
         b64_images = [base64.b64encode(b).decode() for b in images]
         client = ollama.Client(host=self._host)
         resp = client.chat(
@@ -462,9 +458,6 @@ class OllamaJudge:
         images: list[bytes],
         base_scene: str,
     ) -> GenderJudgement | None:
-        import base64
-
-        import ollama  # type: ignore[import]
 
         m = len(images)
         chunk_size = 4

@@ -31,6 +31,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ouroboros.config import JUDGE_MLX_DEFAULT, JUDGE_OLLAMA_DEFAULT
 from ouroboros.judge import JudgeBackend, _extract_json, build_judge
 
 logger = logging.getLogger(__name__)
@@ -292,11 +293,6 @@ def run_judge_validation(
     Writes ``judge_validation.json`` (full report) and ``judge_predictions.jsonl``
     (per-image gt/pred) under ``out_dir``; returns the report dict.
     """
-    from ouroboros.config import (
-        JUDGE_MLX_DEFAULT,
-        JUDGE_OLLAMA_DEFAULT,
-    )
-
     model = judge_model or {
         "mlx": JUDGE_MLX_DEFAULT,
         "ollama": JUDGE_OLLAMA_DEFAULT,

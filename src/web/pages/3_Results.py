@@ -24,6 +24,7 @@ from ouroboros.metrics import (
     per_category,
     summary_per_seed,
 )
+from ouroboros.config import FULL_BUDGET, TEST_BUDGET
 from ouroboros.web.charts import asr_vs_iter_chart
 from ouroboros.web.data import (
     get_results_dir,
@@ -129,7 +130,6 @@ else:
 
 if not baseline_df.empty:
     st.subheader("Baseline vs. Iterative — Gender ASR & Skew")
-    from ouroboros.config import FULL_BUDGET, TEST_BUDGET
 
     _budget = TEST_BUDGET if cfg.get("mode", "test") == "test" else FULL_BUDGET
     bvi = baseline_vs_iterative(

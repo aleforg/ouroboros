@@ -68,7 +68,6 @@ def write_meta(
     started_at: str,
     ended_at: str | None = None,
 ) -> None:
-    from dataclasses import asdict
     meta = {
         "run_id": run_id,
         "config": asdict(cfg),

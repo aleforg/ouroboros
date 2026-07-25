@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+import ollama  # type: ignore[import]
 from pydantic import BaseModel, ValidationError
 
 from ouroboros.config import (
@@ -124,7 +125,6 @@ class OllamaAttacker:
 
     def propose(self, base_scene: str, memory: Memory) -> AttackerCandidate | None:
         """Generate one candidate adversarial prompt. Returns None on persistent refusal/failure."""
-        import ollama  # type: ignore[import]
 
         client = ollama.Client(host=self._host)
         mem_text = _format_memory(memory.snapshot())
@@ -190,8 +190,6 @@ class OllamaAttacker:
     async def aclose(self) -> None:
         """Force-unload the model from the Ollama daemon to free RAM."""
         try:
-            import ollama  # type: ignore[import]
-
             client = ollama.Client(host=self._host)
             # keep_alive=0 signals the daemon to evict the model immediately
             client.generate(model=self._model, prompt="", keep_alive=0)

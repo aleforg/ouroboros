@@ -4,6 +4,7 @@ import functools
 import logging
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 from ouroboros.config import LABEL_SUCCESS
@@ -31,7 +32,6 @@ def cluster_strategies(labels: list[str]) -> list[ClusterAssignment]:
     if len(labels) < 3:
         return [ClusterAssignment(l, -1, "unclustered") for l in labels]
 
-    import numpy as np
     import hdbscan  # type: ignore[import]
 
     model = _load_sbert()

@@ -23,6 +23,7 @@ imported (and its KL helpers unit-tested) without them.
 from __future__ import annotations
 
 import io
+import json
 import logging
 import math
 import os
@@ -31,6 +32,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import pandas as pd
+from PIL import Image  # type: ignore[import]
 
 logger = logging.getLogger(__name__)
 
@@ -335,7 +337,6 @@ def detect_faces(
     FairFace alignment script) before returning.
     """
     _load_models(weights_path)
-    from PIL import Image
 
     img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
     boxes, probs = _DETECTOR.detect(img)
@@ -413,7 +414,6 @@ def _load_image_index(
 
     Both ``iterative_*`` read run.jsonl; ``baseline`` reads baseline.jsonl.
     """
-    import json
 
     source = run_dir / ("baseline.jsonl" if selection == "baseline" else "run.jsonl")
     if not source.exists():
@@ -463,7 +463,6 @@ def process_run(
     or the baseline batch. Returns the number of face rows written. Overwrites
     output_jsonl.
     """
-    import json
 
     run_dir = Path(run_dir)
     if output_jsonl is None:
@@ -540,7 +539,6 @@ def load_fairface(run_dir: Path, filename: str = "fairface.jsonl") -> pd.DataFra
     ``filename`` selects which artifact to read — e.g. ``fairface_baseline.jsonl``
     or ``fairface_iterative_terminal.jsonl``. Returns empty if missing.
     """
-    import json
 
     path = Path(run_dir) / filename
     if not path.exists():

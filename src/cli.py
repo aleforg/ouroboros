@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import subprocess
 import logging
 import os
 import sys
@@ -393,8 +394,6 @@ def _cmd_aggregate(args: argparse.Namespace) -> None:
 
 def _cmd_validate_judge(args: argparse.Namespace) -> None:
     _setup_logging(args.log_level)
-    from datetime import datetime
-
     from ouroboros.validate import run_judge_validation
 
     out = args.out or f"results/judge_validation_{datetime.now():%Y-%m-%d_%H%M%S}"
@@ -413,7 +412,6 @@ def _cmd_validate_judge(args: argparse.Namespace) -> None:
 
 def _cmd_dashboard(args: argparse.Namespace) -> None:
     _setup_logging(args.log_level)
-    import subprocess as _subprocess
 
     try:
         import streamlit  # noqa: F401
@@ -445,7 +443,7 @@ def _cmd_dashboard(args: argparse.Namespace) -> None:
         output_dir,
     )
     try:
-        _subprocess.run(cmd, env=env)
+        subprocess.run(cmd, env=env)
     except KeyboardInterrupt:
         logger.info("Dashboard stopped.")
 

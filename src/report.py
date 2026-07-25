@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from jinja2 import Environment, FileSystemLoader  # type: ignore[import]
 from ouroboros import __version__
-from ouroboros.config import LABEL_SUCCESS
+from ouroboros.config import FULL_BUDGET, LABEL_SUCCESS, TEST_BUDGET
 from ouroboros.metrics import (
     aggregate_runs,
     asr_vs_iter,
@@ -139,7 +140,6 @@ def _success_n_of_m(run_dir: Path) -> int:
     Resolves the frozen ModeBudget via the run's mode. Falls back to 2 when meta
     is missing or unreadable, so old runs still re-score sensibly.
     """
-    from ouroboros.config import FULL_BUDGET, TEST_BUDGET
 
     meta_path = run_dir / "meta.json"
     try:
@@ -158,7 +158,6 @@ def _terminal_run_subset(run_df) -> "pd.DataFrame":
     terminal batch, matching the face rows produced by
     ``process_run(selection="iterative_terminal")``.
     """
-    import pandas as pd
 
     if run_df.empty or "samples" not in run_df.columns or "seed_id" not in run_df.columns:
         return run_df
@@ -184,7 +183,6 @@ def _kl_delta(baseline_kl, iterative_kl) -> "pd.DataFrame":
     Columns per axis (gender/race/age): baseline_kl_<axis>, iterative_kl_<axis>,
     delta_kl_<axis> (iterative − baseline; positive = the attacker widened skew).
     """
-    import pandas as pd
 
     axes = ["gender", "race", "age"]
     b_by = (
@@ -242,7 +240,6 @@ def _run_fairface_pipeline(run_dir: Path, run_df, baseline_df):
     Errors (missing weights, torch not installed, etc.) are logged but never
     raised — the rest of the report should still generate.
     """
-    import pandas as pd
 
     empty = pd.DataFrame()
     try:
@@ -531,8 +528,6 @@ def run_aggregate_report(run_dirs: list[Path], out_dir: Path) -> None:
 
     agg = aggregate_runs(run_dirs)
 
-    import pandas as pd
-
     cat_df = pd.DataFrame(agg.get("per_category", []))
     stab_df = pd.DataFrame(agg.get("per_seed_stability", []))
 
@@ -577,7 +572,6 @@ def _render_html(
     agreement_spearman_rows: list[dict],
     agreement_gender_rows: list[dict],
 ) -> str:
-    from jinja2 import Environment, FileSystemLoader  # type: ignore[import]
 
     templates_dir = Path(__file__).parent / "templates"
     env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=False)
@@ -610,7 +604,6 @@ def _render_aggregate_html(
     per_category: list[dict],
     stability: list[dict],
 ) -> str:
-    from jinja2 import Environment, FileSystemLoader  # type: ignore[import]
 
     templates_dir = Path(__file__).parent / "templates"
     env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=False)

@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ouroboros.storage import load_checkpoint
+
 
 # ---------------------------------------------------------------------------
 # Results directory resolution
@@ -73,7 +75,6 @@ def read_checkpoint(run_dir: Path) -> dict | None:
 
     Delegates to ``ouroboros.storage.load_checkpoint`` for consistency.
     """
-    from ouroboros.storage import load_checkpoint
     return load_checkpoint(run_dir)
 
 
