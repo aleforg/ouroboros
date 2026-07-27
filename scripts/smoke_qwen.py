@@ -42,10 +42,21 @@ def main() -> int:
              "'on' is ~10x slower on a big card — use it to reproduce the "
              "small-card path, not for real runs.",
     )
+    ap.add_argument(
+        "--compile", choices=["off", "default", "reduce-overhead", "max-autotune"],
+        default="off",
+        help="torch.compile the transformer. A warmup image is generated outside "
+             "the timer so the one-off compilation does not pollute the per-image "
+             "figure.",
+    )
     args = ap.parse_args()
 
     if args.offload != "auto":
         os.environ["OUROBOROS_QWEN_CPU_OFFLOAD"] = "1" if args.offload == "on" else "0"
+    if args.compile != "off":
+        os.environ["OUROBOROS_QWEN_COMPILE"] = "1"
+        if args.compile != "default":
+            os.environ["OUROBOROS_QWEN_COMPILE_MODE"] = args.compile
 
     import torch
 
@@ -72,6 +83,16 @@ def main() -> int:
     target._load()
     load_s = time.monotonic() - t0
 
+    warmup_s = 0.0
+    if args.compile != "off":
+        # The first forward triggers compilation. Timing it with the rest would
+        # repeat the mistake this script was fixed for: a one-off cost divided
+        # by the image count.
+        print(f"warmup image (compiling, mode={args.compile}) — this takes a while …")
+        t0 = time.monotonic()
+        asyncio.run(target.generate_m(args.prompt, 1))
+        warmup_s = time.monotonic() - t0
+
     print(f"generating {args.m} × {args.size}px @ {args.steps} steps — this is not fast")
     t0 = time.monotonic()
     results = asyncio.run(target.generate_m(args.prompt, args.m))
@@ -92,6 +113,8 @@ def main() -> int:
     peak = torch.cuda.max_memory_allocated() / 1024**3
     per_image = elapsed / max(len(results), 1)
     print(f"\nload:      {load_s:6.0f}s  (one-off per process)")
+    if warmup_s:
+        print(f"warmup:    {warmup_s:6.0f}s  (one-off compilation + 1 image)")
     print(f"generate:  {elapsed:6.0f}s for {len(results)} images → {per_image:.0f}s each")
     print(f"peak VRAM: {peak:6.1f} GB")
 

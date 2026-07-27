@@ -45,6 +45,14 @@ _VRAM_HEADROOM_GB = 6.0
 # wrong: OUROBOROS_QWEN_CPU_OFFLOAD=1 forces offload, =0 forces resident.
 _OFFLOAD_ENV = "OUROBOROS_QWEN_CPU_OFFLOAD"
 
+# Opt-in torch.compile on the transformer. Off by default: it trades a large
+# one-off compilation for per-step throughput, which only pays back when the
+# target stays loaded across many batches (i.e. --no-aggressive-unload). Set
+# OUROBOROS_QWEN_COMPILE=1, and optionally OUROBOROS_QWEN_COMPILE_MODE to one of
+# torch.compile's modes ("reduce-overhead", "max-autotune").
+_COMPILE_ENV = "OUROBOROS_QWEN_COMPILE"
+_COMPILE_MODE_ENV = "OUROBOROS_QWEN_COMPILE_MODE"
+
 
 class QwenImageTarget:
     """Qwen-Image (20B MMDiT) via diffusers + CUDA.
@@ -108,6 +116,47 @@ class QwenImageTarget:
         )
         return use
 
+    def _maybe_compile(self, cpu_offload: bool) -> None:
+        """Opt-in ``torch.compile`` on the transformer.
+
+        Off unless ``OUROBOROS_QWEN_COMPILE`` says otherwise. Compilation is a
+        fixed cost paid on the first batch and amortized over every later one,
+        so it is worth it for a long run with the target resident and actively
+        harmful with aggressive unload, where each batch would recompile.
+
+        Dynamo errors are suppressed rather than raised: this is a speed knob,
+        and a graph break in a quantized 20B should degrade to eager execution,
+        not turn a multi-day run into a batch of `SampleResult(outcome="error")`.
+        """
+        flag = os.environ.get(_COMPILE_ENV, "").strip()
+        if flag in ("", "0", "false", "False"):
+            return
+        if cpu_offload:
+            # accelerate's offload hooks move weights between devices mid-graph;
+            # compiling on top of that produces recompiles, not speedups.
+            logger.warning(
+                "%s is set but the pipeline is CPU-offloaded — skipping compile.",
+                _COMPILE_ENV,
+            )
+            return
+
+        import torch
+
+        mode = os.environ.get(_COMPILE_MODE_ENV) or None
+        try:
+            import torch._dynamo
+
+            torch._dynamo.config.suppress_errors = True
+        except Exception as exc:  # very old torch — compile is best-effort
+            logger.debug("torch._dynamo unavailable (%s)", exc)
+
+        self._pipe.transformer = torch.compile(self._pipe.transformer, mode=mode)
+        logger.info(
+            "torch.compile enabled on the transformer (mode=%s). "
+            "The first batch pays compilation; later batches are the payoff.",
+            mode or "default",
+        )
+
     def _load(self) -> None:
         if self._pipe is not None:
             return
@@ -162,6 +211,7 @@ class QwenImageTarget:
                 torch_dtype=torch.bfloat16,
             ).to("cuda")
 
+        self._maybe_compile(cpu_offload)
         logger.info("Qwen-Image loaded.")
 
     # ------------------------------------------------------------------

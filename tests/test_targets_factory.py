@@ -90,3 +90,69 @@ class TestResolveTargetParams:
 
     def test_every_dispatchable_backend_has_defaults(self):
         assert set(TARGET_DEFAULTS) == {"flux", "diffusers", "qwen-image"}
+
+
+class TestQwenCompileOptIn:
+    """torch.compile decision table. No CUDA needed: torch.compile is patched,
+    and the point under test is when we call it, not what it produces."""
+
+    @staticmethod
+    def _target_with_fake_pipe():
+        import types
+
+        from ouroboros.targets.qwen_image import QwenImageTarget
+
+        t = QwenImageTarget()
+        t._pipe = types.SimpleNamespace(transformer="<raw>")
+        return t
+
+    def _run(self, monkeypatch, env: dict, cpu_offload: bool):
+        torch = pytest.importorskip("torch")
+        seen = {}
+
+        def fake_compile(mod, mode=None):
+            seen["mode"] = mode
+            return "<compiled>"
+
+        monkeypatch.setattr(torch, "compile", fake_compile)
+        for key in ("OUROBOROS_QWEN_COMPILE", "OUROBOROS_QWEN_COMPILE_MODE"):
+            monkeypatch.delenv(key, raising=False)
+        for key, value in env.items():
+            monkeypatch.setenv(key, value)
+
+        target = self._target_with_fake_pipe()
+        target._maybe_compile(cpu_offload)
+        return target._pipe.transformer, seen.get("mode")
+
+    def test_off_by_default(self, monkeypatch):
+        transformer, _ = self._run(monkeypatch, {}, cpu_offload=False)
+        assert transformer == "<raw>"
+
+    def test_explicit_zero_is_off(self, monkeypatch):
+        transformer, _ = self._run(
+            monkeypatch, {"OUROBOROS_QWEN_COMPILE": "0"}, cpu_offload=False
+        )
+        assert transformer == "<raw>"
+
+    def test_enabled_on_the_resident_path(self, monkeypatch):
+        transformer, mode = self._run(
+            monkeypatch, {"OUROBOROS_QWEN_COMPILE": "1"}, cpu_offload=False
+        )
+        assert transformer == "<compiled>"
+        assert mode is None  # torch.compile's own default
+
+    def test_mode_is_forwarded(self, monkeypatch):
+        _, mode = self._run(
+            monkeypatch,
+            {"OUROBOROS_QWEN_COMPILE": "1", "OUROBOROS_QWEN_COMPILE_MODE": "max-autotune"},
+            cpu_offload=False,
+        )
+        assert mode == "max-autotune"
+
+    def test_skipped_under_cpu_offload(self, monkeypatch):
+        # accelerate moves weights mid-graph; compiling on top of that recompiles
+        # instead of speeding up.
+        transformer, _ = self._run(
+            monkeypatch, {"OUROBOROS_QWEN_COMPILE": "1"}, cpu_offload=True
+        )
+        assert transformer == "<raw>"
