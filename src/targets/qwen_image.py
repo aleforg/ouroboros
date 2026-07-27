@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import os
 
 from ouroboros.targets.base import SampleResult
 
@@ -32,6 +33,17 @@ _NEGATIVE_PROMPT = " "
 # 4-bit configuration fit on a 24 GB card.
 _VRAM_GB: dict[int, float] = {4: 18.0, 8: 30.0}
 _VRAM_BF16 = 60.0
+
+# Headroom over the weight estimate for activations and fragmentation. Above
+# this the pipeline is kept resident on the GPU; below it, weights are offloaded
+# to system RAM. CPU offload costs real throughput on a quantized 20B — measured
+# ~100 s/image at 4 steps on a 48 GB A6000, ~10x what resident inference needs —
+# so it must be the fallback for small cards, never the default on a big one.
+_VRAM_HEADROOM_GB = 6.0
+
+# Escape hatch for benchmarking or a card whose free VRAM the auto-policy reads
+# wrong: OUROBOROS_QWEN_CPU_OFFLOAD=1 forces offload, =0 forces resident.
+_OFFLOAD_ENV = "OUROBOROS_QWEN_CPU_OFFLOAD"
 
 
 class QwenImageTarget:
@@ -80,6 +92,22 @@ class QwenImageTarget:
     # Lazy load
     # ------------------------------------------------------------------
 
+    def _use_cpu_offload(self, total_vram_gb: float) -> bool:
+        """Offload weights to system RAM only when they would not fit resident."""
+        forced = os.environ.get(_OFFLOAD_ENV)
+        if forced is not None:
+            use = forced.strip() not in ("0", "false", "False", "")
+            logger.info("%s=%s → cpu_offload=%s", _OFFLOAD_ENV, forced, use)
+            return use
+        needed = self.estimated_peak_ram_gb + _VRAM_HEADROOM_GB
+        use = total_vram_gb < needed
+        logger.info(
+            "GPU has %.1f GB, this config needs ~%.1f GB → %s",
+            total_vram_gb, needed,
+            "cpu offload (slow, but it fits)" if use else "keeping the pipeline resident",
+        )
+        return use
+
     def _load(self) -> None:
         if self._pipe is not None:
             return
@@ -92,6 +120,8 @@ class QwenImageTarget:
             _MODEL_ID, self._quantize_bits, self._steps,
             self._width, self._height, _TRUE_CFG_SCALE,
         )
+        total_vram_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        cpu_offload = self._use_cpu_offload(total_vram_gb)
 
         if self._quantize_bits in (4, 8):
             from diffusers.quantizers import PipelineQuantizationConfig
@@ -113,13 +143,18 @@ class QwenImageTarget:
                 quant_kwargs=quant_kwargs,
                 components_to_quantize=["transformer", "text_encoder"],
             )
-            # No device_map here — it conflicts with enable_model_cpu_offload().
+            # device_map and enable_model_cpu_offload() are mutually exclusive:
+            # the first pins the pipeline on the GPU, the second hands placement
+            # to accelerate's hooks. A bitsandbytes-quantized pipeline cannot be
+            # moved with .to("cuda") afterwards, so the choice is made here.
             self._pipe = DiffusionPipeline.from_pretrained(
                 _MODEL_ID,
                 torch_dtype=torch.bfloat16,
                 quantization_config=quant_config,
+                **({} if cpu_offload else {"device_map": "cuda"}),
             )
-            self._pipe.enable_model_cpu_offload()
+            if cpu_offload:
+                self._pipe.enable_model_cpu_offload()
 
         else:
             self._pipe = DiffusionPipeline.from_pretrained(

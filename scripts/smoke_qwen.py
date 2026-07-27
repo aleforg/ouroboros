@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import pathlib
 import sys
 import time
@@ -35,7 +36,16 @@ def main() -> int:
     ap.add_argument("--m", type=int, default=2, help="images to generate")
     ap.add_argument("--prompt", default=PROMPT)
     ap.add_argument("--out", default="smoke_out")
+    ap.add_argument(
+        "--offload", choices=["auto", "on", "off"], default="auto",
+        help="CPU-offload the weights. 'auto' offloads only when VRAM is tight. "
+             "'on' is ~10x slower on a big card — use it to reproduce the "
+             "small-card path, not for real runs.",
+    )
     args = ap.parse_args()
+
+    if args.offload != "auto":
+        os.environ["OUROBOROS_QWEN_CPU_OFFLOAD"] = "1" if args.offload == "on" else "0"
 
     import torch
 
