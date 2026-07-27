@@ -208,12 +208,35 @@ class QwenImageTarget:
         nothing but does re-quantize a 20B transformer, which takes minutes.
         Prefer --no-aggressive-unload when running this backend; the CLI warns
         about it at startup.
-        """
-        if self._pipe is not None:
-            import torch
 
-            del self._pipe
-            self._pipe = None
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            logger.debug("QwenImageTarget: VRAM released.")
+        `del` alone does not free a resident pipeline: diffusers components
+        cross-reference each other, and accelerate's device hooks reference the
+        modules they wrap, so the whole graph is a reference cycle that only the
+        cyclic collector breaks. Under CPU offload this was invisible — the
+        weights lived in system RAM and there was nothing on the GPU to leak.
+        """
+        if self._pipe is None:
+            return
+
+        import gc
+
+        import torch
+
+        # Drop accelerate's hooks first; they hold references to the modules
+        # (and, on the offload path, to their weight maps).
+        try:
+            from accelerate.hooks import remove_hook_from_module
+
+            for component in ("transformer", "text_encoder", "vae"):
+                module = getattr(self._pipe, component, None)
+                if module is not None:
+                    remove_hook_from_module(module, recurse=True)
+        except Exception as exc:  # accelerate missing or API drift — not fatal
+            logger.debug("QwenImageTarget: hook removal skipped (%s)", exc)
+
+        del self._pipe
+        self._pipe = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logger.debug("QwenImageTarget: VRAM released.")

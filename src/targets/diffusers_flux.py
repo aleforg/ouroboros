@@ -163,12 +163,23 @@ class FluxDiffusersTarget:
         return results
 
     async def aclose(self) -> None:
-        """Release GPU memory."""
-        if self._pipe is not None:
-            import torch
+        """Release GPU memory.
 
-            del self._pipe
-            self._pipe = None
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            logger.debug("FluxDiffusersTarget: VRAM released.")
+        gc.collect() is not optional: the pipeline components cross-reference
+        each other, so `del` leaves a reference cycle holding the weights. It
+        only shows on the bf16 path, where the model is resident via .to("cuda")
+        rather than parked in system RAM by the offload hooks.
+        """
+        if self._pipe is None:
+            return
+
+        import gc
+
+        import torch
+
+        del self._pipe
+        self._pipe = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logger.debug("FluxDiffusersTarget: VRAM released.")
