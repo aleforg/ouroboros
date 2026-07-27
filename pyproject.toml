@@ -8,26 +8,39 @@ version = "0.1.0"
 description = "Multimodal Iterative Red Teaming for Adversarial Generative-AI Evaluation"
 requires-python = ">=3.10"
 dependencies = [
+    # Cross-platform core: the loop, the metrics and the report must install and
+    # run anywhere. Anything platform-specific or optional lives in an extra.
     "pandas>=2.0",
     "tqdm>=4.65",
     "python-dotenv>=1.0",
     "pydantic>=2.0",
     "ollama>=0.4",
-    "google-genai>=0.3",
-    "mflux>=0.6",
     "psutil>=5.9",
-    "mlx-vlm>=0.1",
     "Pillow>=10.0",
+    "jinja2>=3.0",
+    # Strategy clustering (src/cluster.py), invoked by `ouroboros report`.
+    # Heavy: sentence-transformers pulls torch.
     "hdbscan>=0.8",
     "sentence-transformers>=2.5",
-    "jinja2>=3.0",
-    "datasets>=2.14",
+    # Apple Silicon only. MLX has no wheels for other platforms, so these must
+    # carry a marker: without it `pip install ouroboros` fails outright on the
+    # Linux/CUDA boxes the diffusers backend exists for. On Apple Silicon they
+    # are the default target (mflux) and default judge (mlx-vlm), so they are
+    # installed automatically rather than hidden behind an extra.
+    "mflux>=0.6; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "mlx-vlm>=0.1; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+]
+seeds = [
+    # Only needed to regenerate data/stable_bias_prompts.jsonl from the
+    # HuggingFace source (see docs/05-dataset.md). The checked-in JSONL is what
+    # a run actually reads, so this is not required to use the framework.
+    "datasets>=2.14",
 ]
 fairface = [
     # Required to run the post-hoc demographic skew pipeline (`ouroboros report`).

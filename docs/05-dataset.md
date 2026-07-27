@@ -211,7 +211,9 @@ print(f'Wrote {len(profs)} prompts')
 #   rm -rf ~/.cache/huggingface/datasets/tti-bias___professions
 ```
 
-Dipendenze: `datasets>=2.14` (già in `pyproject.toml`).
+Dipendenze: `datasets>=2.14`, nell'extra dedicato — `pip install -e ".[seeds]"`.
+Non è una dipendenza core perché un run legge il JSONL già versionato: serve solo
+a rigenerarlo dalla sorgente HuggingFace.
 
 Dopo aver rigenerato i prompt, rigenera anche la reference BLS derivata:
 

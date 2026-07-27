@@ -24,17 +24,17 @@ I tre modelli non sono mai residenti insieme: le fasi sono sequenziali con unloa
 pip install -e ".[dev]"
 ```
 
-Per la pipeline FairFace post-hoc (opzionale):
+Il core è cross-platform. **Su Apple Silicon** `mflux` e `mlx-vlm` — target e judge di default — vengono installati automaticamente tramite marker di piattaforma; **su Linux/CUDA** vengono saltati, perché MLX non ha wheel per altre piattaforme, e il target va scelto con l'extra `diffusers`.
 
-```bash
-pip install -e ".[fairface]"
-```
+Extra disponibili:
 
-Per la dashboard web (opzionale, richiede Streamlit ≥ 1.37):
-
-```bash
-pip install -e ".[web]"
-```
+| Extra | Comando | Serve per |
+|---|---|---|
+| `fairface` | `pip install -e ".[fairface]"` | pipeline demografica post-hoc dentro `ouroboros report` |
+| `web` | `pip install -e ".[web]"` | dashboard Streamlit (≥ 1.37) |
+| `diffusers` | `pip install -e ".[diffusers]"` | target FLUX su NVIDIA CUDA (`--target-backend diffusers`) |
+| `seeds` | `pip install -e ".[seeds]"` | rigenerare `data/stable_bias_prompts.jsonl` dalla sorgente HuggingFace |
+| `dev` | `pip install -e ".[dev]"` | pytest |
 
 Scaricare manualmente i pesi `res34_fair_align_multi_7_20190809.pt` da [joojs/fairface](https://github.com/joojs/fairface) in `~/.cache/ouroboros/fairface/` (oppure puntare con `OUROBOROS_FAIRFACE_WEIGHTS`).
 
