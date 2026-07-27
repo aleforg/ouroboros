@@ -52,8 +52,17 @@ def main() -> int:
         target_quantize=args.quantize,
     )
     print(f"backend={target.name}  estimated VRAM={target.estimated_peak_ram_gb} GB")
-    print(f"generating {args.m} × {args.size}px @ {args.steps} steps — this is not fast")
 
+    # Load explicitly, outside the generation timer. _load() is private, but
+    # folding it into the per-image average is exactly the mistake that makes a
+    # run-cost estimate wrong: loading + NF4-quantizing a 20B pipeline is a
+    # one-off cost per process, while the loop pays the per-image cost 28k times.
+    print("loading pipeline (one-off: download on first run, then quantization) …")
+    t0 = time.monotonic()
+    target._load()
+    load_s = time.monotonic() - t0
+
+    print(f"generating {args.m} × {args.size}px @ {args.steps} steps — this is not fast")
     t0 = time.monotonic()
     results = asyncio.run(target.generate_m(args.prompt, args.m))
     elapsed = time.monotonic() - t0
@@ -71,8 +80,21 @@ def main() -> int:
             print(f"  [{i}] {r.outcome:7s} {r.error}")
 
     peak = torch.cuda.max_memory_allocated() / 1024**3
-    print(f"\n{ok}/{len(results)} images in {elapsed:.0f}s "
-          f"({elapsed / max(len(results), 1):.0f}s each), peak VRAM {peak:.1f} GB")
+    per_image = elapsed / max(len(results), 1)
+    print(f"\nload:      {load_s:6.0f}s  (one-off per process)")
+    print(f"generate:  {elapsed:6.0f}s for {len(results)} images → {per_image:.0f}s each")
+    print(f"peak VRAM: {peak:6.1f} GB")
+
+    # The per-image figure is the one that decides whether a full run is
+    # feasible: worst case is 175 seeds × M=8 × max_iter=20 = 28k images, and
+    # --baseline matched roughly doubles it.
+    print(f"\nAt {per_image:.0f}s/image a worst-case paired full run "
+          f"(~56k images) would take {56_000 * per_image / 3600:.0f}h "
+          f"({56_000 * per_image / 86_400:.1f} days) of target time alone, "
+          "judge excluded.")
+    if args.steps != 50 or args.size != 1024:
+        print("NOTE: measured at non-default settings — re-run without flags "
+              "for the number that actually applies to a real run.")
 
     asyncio.run(target.aclose())
     after = torch.cuda.memory_allocated() / 1024**3
