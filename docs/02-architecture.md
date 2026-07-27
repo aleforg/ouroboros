@@ -11,7 +11,7 @@ flowchart TD
     A[Seed prompts<br/>Stable Bias: 175 professioni] --> B{per ogni seed}
     B --> C[Attacker LLM<br/>Ollama locale<br/>dolphin-llama3:latest]
     C -->|target_prompt| UNL1[unload attacker<br/>libera ~5 GB RAM]
-    UNL1 --> D[Target T2I<br/>FLUX locale<br/>mflux MLX / diffusers CUDA]
+    UNL1 --> D[Target T2I<br/>FLUX.2-klein mflux MLX<br/>FLUX.2-klein / Qwen-Image su CUDA]
     D -->|M immagini sequenziali| UNL2[unload target<br/>libera ~5 GB RAM]
     UNL2 --> RAM[RAM monitor<br/>psutil snapshot]
     RAM --> E[Judge VLM locale<br/>Qwen3-VL-8B<br/>MLX o Ollama]
@@ -87,7 +87,8 @@ flowchart LR
         subgraph Target
             tgt_b[targets/base.py<br/>Protocol + factory]
             tgt_f[targets/flux.py<br/>mflux, Apple Silicon]
-            tgt_d[targets/diffusers_flux.py<br/>diffusers, NVIDIA CUDA]
+            tgt_d[targets/diffusers_flux.py<br/>FLUX.2-klein, NVIDIA CUDA]
+            tgt_q[targets/qwen_image.py<br/>Qwen-Image 20B, NVIDIA CUDA]
         end
         jdg["judge.py<br/>MLXJudge / OllamaJudge<br/>(solo locale)"]
     end
@@ -130,9 +131,10 @@ flowchart LR
 | `config.py` | Costanti, dataclass `RunConfig` (frozen), `ModeBudget` (TEST/FULL), RAM check statico, `MODEL_SIZE_REGISTRY` | — |
 | `seeds.py` | `load_test_seeds()` (10 seed hard-coded) e `load_full_seeds()` (175 professioni da `data/stable_bias_prompts.jsonl`); la `category` di ogni seed è il **gruppo stereotipico** BLS (`male_coded`/`female_coded`/`balanced`) | — |
 | `attacker.py` | Client Ollama uncensored + `Memory` (top-K per bias_score + most-recent) + `aclose()` lifecycle | `ollama`, `pydantic` |
-| `targets/base.py` | `TargetBackend` Protocol, `SampleResult`, `build_target()` factory. Dispatch `"flux"` / `"diffusers"`; raise ValueError per altri valori | — |
+| `targets/base.py` | `TargetBackend` Protocol, `SampleResult`, `build_target()` factory. Dispatch `"flux"` / `"diffusers"` / `"qwen-image"`; raise ValueError per altri valori | — |
 | `targets/flux.py` | `FluxLocalTarget`: FLUX.2-klein-4B via mflux, lazy load, M sequenziali sul thread asyncio, `aclose()` libera la MLX cache | `mflux` |
-| `targets/diffusers_flux.py` | `FluxDiffusersTarget`: FLUX.1-schnell via HuggingFace diffusers su NVIDIA CUDA (RunPod/Lambda/Colab); `quantize_bits` 4→NF4 / 8 / bf16 | `diffusers`, `torch` |
+| `targets/diffusers_flux.py` | `FluxDiffusersTarget`: FLUX.2-klein-4B via HuggingFace diffusers su NVIDIA CUDA (RunPod/Lambda/Colab); `quantize_bits` 4→NF4 / 8 / bf16 | `diffusers`, `torch` |
+| `targets/qwen_image.py` | `QwenImageTarget`: Qwen-Image 20B via diffusers su NVIDIA CUDA; quantizza transformer **e** text encoder (Qwen2.5-VL-7B) via `PipelineQuantizationConfig`; default 50 step / 1024 px / `true_cfg_scale=4.0` | `diffusers`, `torch`, `bitsandbytes` |
 | `judge.py` | Schema `GenderJudgement` (etichetta per immagine + campi **derivati**), helper di etichetta, `MLXJudge` / `OllamaJudge`, `build_judge()`, estrattore JSON a conteggio graffe. **Nessun backend cloud** | `mlx-vlm`, `ollama`, `pydantic`, `Pillow` |
 | `ram.py` | `RamMonitor`: snapshot psutil RSS + system memory a ogni fase; scrive `ram.jsonl` | `psutil` |
 | `loop.py` | Orchestratore: attacker → [unload] → target → [unload] → judge; RAM snapshot; refusal pivot; `_success_rule`; `_write_live` | tutto sopra |

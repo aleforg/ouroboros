@@ -44,7 +44,7 @@ GENDER_UNCLEAR = "unclear"
 # --- model defaults -----------------------------------------------------------
 
 ATTACKER_DEFAULT = "dolphin-llama3:latest"
-TARGET_BACKEND_DEFAULT: Literal["flux", "diffusers"] = "flux"
+TARGET_BACKEND_DEFAULT: Literal["flux", "diffusers", "qwen-image"] = "flux"
 JUDGE_BACKEND_DEFAULT: Literal["mlx", "ollama"] = "mlx"
 JUDGE_MLX_DEFAULT = "mlx-community/Qwen3-VL-8B-Instruct-4bit"
 JUDGE_OLLAMA_DEFAULT = "qwen3-vl:8b"
@@ -59,14 +59,20 @@ MODEL_SIZE_REGISTRY: dict[str, float] = {
     "qwen3-vl:8b": 6.0,
     "minicpm-v": 5.5,
     "llama3.2-vision:11b": 7.5,
-    # FLUX local targets
+    # FLUX local targets (mflux, Apple Silicon — system RAM)
     "flux2-klein-4b-q4": 5.0,
     "flux2-klein-4b-q8": 8.0,
     "flux2-klein-9b-q4": 9.0,
-    # FLUX.1-schnell diffusers targets (NVIDIA CUDA — VRAM, listed for reference)
-    "flux1-schnell-q4": 7.0,
-    "flux1-schnell-q8": 14.0,
-    "flux1-schnell-bf16": 26.0,
+    # FLUX.2-klein diffusers targets (NVIDIA CUDA — VRAM, listed for reference)
+    "flux2-klein-4b-diffusers-q4": 3.5,
+    "flux2-klein-4b-diffusers-q8": 6.5,
+    "flux2-klein-4b-diffusers-bf16": 11.0,
+    # Qwen-Image targets (NVIDIA CUDA — VRAM, listed for reference).
+    # 20B MMDiT + Qwen2.5-VL-7B text encoder; both are quantized, so the
+    # 4-bit figure is what makes it fit on a 24 GB card.
+    "qwen-image-20b-q4": 18.0,
+    "qwen-image-20b-q8": 30.0,
+    "qwen-image-20b-bf16": 60.0,
 }
 
 RAM_BUDGET_GB: float = (
@@ -137,6 +143,39 @@ TARGET_BACKOFF_BASE = 2.0
 TARGET_BACKOFF_MAX = 64.0
 DEFAULT_RATE_LIMIT_PER_MIN = 60
 
+# Sampling defaults per target backend. They are NOT interchangeable: the two
+# FLUX.2-klein backends run a guidance-distilled model that is converged at 4
+# steps, while Qwen-Image is an undistilled 20B MMDiT whose reference config is
+# 50 steps at its native ~1k resolution. Applying klein's 4 steps to Qwen would
+# produce noise, so the CLI flags default to None and are resolved here against
+# the selected backend rather than against a single global constant.
+TARGET_DEFAULTS: dict[str, dict[str, int]] = {
+    "flux": {"steps": 4, "size": 512, "quantize": 4},
+    "diffusers": {"steps": 4, "size": 512, "quantize": 4},
+    "qwen-image": {"steps": 50, "size": 1024, "quantize": 4},
+}
+
+
+def resolve_target_params(
+    backend: str,
+    steps: int | None = None,
+    size: int | None = None,
+    quantize: int | None = None,
+) -> tuple[int, int, int]:
+    """Fill unset target sampling params with the backend's defaults.
+
+    Returns ``(steps, size, quantize)``. A ``None`` argument means "not set by
+    the user" and takes the backend default; an explicit value always wins.
+    Unknown backends fall back to the ``flux`` defaults — ``build_target`` is
+    the layer that rejects an unknown backend name, not this one.
+    """
+    defaults = TARGET_DEFAULTS.get(backend, TARGET_DEFAULTS["flux"])
+    return (
+        defaults["steps"] if steps is None else steps,
+        defaults["size"] if size is None else size,
+        defaults["quantize"] if quantize is None else quantize,
+    )
+
 # --- run config dataclass -----------------------------------------------------
 
 
@@ -144,12 +183,13 @@ DEFAULT_RATE_LIMIT_PER_MIN = 60
 class RunConfig:
     mode: Literal["test", "full"] = "test"
     attacker_model: str = ATTACKER_DEFAULT
-    # target
-    target_backend: Literal["flux", "diffusers"] = TARGET_BACKEND_DEFAULT
-    flux_quantize: int = 4
-    flux_steps: int = 4
-    flux_width: int = 512
-    flux_height: int = 512
+    # target — values here are already resolved against the backend
+    # (see resolve_target_params), so meta.json records what actually ran.
+    target_backend: Literal["flux", "diffusers", "qwen-image"] = TARGET_BACKEND_DEFAULT
+    target_quantize: int = 4
+    target_steps: int = 4
+    target_width: int = 512
+    target_height: int = 512
     judge_backend: Literal["mlx", "ollama"] = JUDGE_BACKEND_DEFAULT
     judge_model: str = JUDGE_MLX_DEFAULT
     # run control

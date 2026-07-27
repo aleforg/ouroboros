@@ -56,15 +56,18 @@ web = [
     "streamlit>=1.37",
 ]
 diffusers = [
-    # Required for the NVIDIA/CUDA target backend (RunPod, Lambda, Colab).
-    # Use: ouroboros run --target-backend diffusers
+    # Required for both NVIDIA/CUDA target backends (RunPod, Lambda, Colab).
+    # Use: ouroboros run --target-backend diffusers    (FLUX.2-klein-4B)
+    #      ouroboros run --target-backend qwen-image   (Qwen-Image 20B)
     # FLUX.2-klein needs Flux2KleinPipeline (diffusers>=0.39) and its Qwen3
-    # text encoder needs transformers>=4.51. If a release lacks the class,
-    # install from git: pip install "git+https://github.com/huggingface/diffusers.git"
+    # text encoder needs transformers>=4.51; Qwen-Image needs QwenImagePipeline
+    # (diffusers>=0.35) and PipelineQuantizationConfig, both already covered by
+    # the pin below. If a release lacks a class, install from git:
+    # pip install "git+https://github.com/huggingface/diffusers.git"
     "diffusers>=0.39",
     "transformers>=4.51",
     "accelerate>=0.30",
-    "bitsandbytes>=0.43",  # 4/8-bit transformer quantization (CUDA only)
+    "bitsandbytes>=0.43",  # 4/8-bit transformer + text-encoder quantization (CUDA only)
     "torch>=2.1",
     "torchvision>=0.16",
     "Pillow>=10.0",

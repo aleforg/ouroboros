@@ -32,9 +32,9 @@ class TestBuildRunCfg:
             "mode": "test",
             "judge_backend": "mlx",
             "judge_model": "",
-            "flux_quantize": 4,
-            "flux_steps": 4,
-            "flux_size": 512,
+            "target_quantize": 4,
+            "target_steps": 4,
+            "target_size": 512,
             "attacker_model": ATTACKER_DEFAULT,
             "rate_limit_per_min": 60,
             "max_t2i_calls": None,
@@ -75,11 +75,11 @@ class TestBuildRunCfg:
         assert cfg_unload.aggressive_unload is True
         assert cfg_no_unload.aggressive_unload is False
 
-    def test_flux_size_applies_to_both_dimensions(self):
+    def test_target_size_applies_to_both_dimensions(self):
         from ouroboros.web.runner import build_run_cfg
-        cfg = build_run_cfg(self._form(flux_size=768))
-        assert cfg.flux_width == 768
-        assert cfg.flux_height == 768
+        cfg = build_run_cfg(self._form(target_size=768))
+        assert cfg.target_width == 768
+        assert cfg.target_height == 768
 
     def test_max_t2i_calls_auto_test(self):
         from ouroboros.web.runner import build_run_cfg
@@ -108,9 +108,9 @@ class TestBuildRunArgv:
             "mode": "test",
             "judge_backend": "mlx",
             "judge_model": "",
-            "flux_quantize": 4,
-            "flux_steps": 4,
-            "flux_size": 512,
+            "target_quantize": 4,
+            "target_steps": 4,
+            "target_size": 512,
             "attacker_model": ATTACKER_DEFAULT,
             "rate_limit_per_min": 60,
             "max_t2i_calls": None,
@@ -171,16 +171,16 @@ class TestBuildRunArgv:
         assert "--resume" in argv
         assert argv[argv.index("--resume") + 1] == "2026-01-01_000000_abcdef01"
 
-    def test_non_default_flux_quantize(self):
+    def test_non_default_target_quantize(self):
         from ouroboros.web.runner import build_run_argv
-        argv = build_run_argv(self._form(flux_quantize=8))
-        assert "--flux-quantize" in argv
-        assert argv[argv.index("--flux-quantize") + 1] == "8"
+        argv = build_run_argv(self._form(target_quantize=8))
+        assert "--target-quantize" in argv
+        assert argv[argv.index("--target-quantize") + 1] == "8"
 
-    def test_default_flux_quantize_omitted(self):
+    def test_default_target_quantize_omitted(self):
         from ouroboros.web.runner import build_run_argv
-        argv = build_run_argv(self._form(flux_quantize=4))
-        assert "--flux-quantize" not in argv
+        argv = build_run_argv(self._form(target_quantize=4))
+        assert "--target-quantize" not in argv
 
 
 # ---------------------------------------------------------------------------
@@ -198,9 +198,9 @@ class TestConfigHashConsistency:
             "mode": "test",
             "judge_backend": "mlx",
             "judge_model": "",
-            "flux_quantize": 4,
-            "flux_steps": 4,
-            "flux_size": 512,
+            "target_quantize": 4,
+            "target_steps": 4,
+            "target_size": 512,
             "attacker_model": ATTACKER_DEFAULT,
             "rate_limit_per_min": 60,
             "max_t2i_calls": None,
@@ -218,7 +218,7 @@ class TestConfigHashConsistency:
         from ouroboros.web.runner import build_run_cfg
         base = {
             "judge_backend": "mlx", "judge_model": "",
-            "flux_quantize": 4, "flux_steps": 4, "flux_size": 512,
+            "target_quantize": 4, "target_steps": 4, "target_size": 512,
             "attacker_model": ATTACKER_DEFAULT, "rate_limit_per_min": 60,
             "max_t2i_calls": None, "allow_swap": False, "no_aggressive_unload": False,
             "seeds_filter": None, "run_baseline": False, "output_dir": "results",
@@ -238,7 +238,7 @@ class TestPreflightRam:
         ok, msg = preflight_ram({
             "mode": "test",
             "judge_backend": "mlx", "judge_model": "",
-            "flux_quantize": 4, "flux_steps": 4, "flux_size": 512,
+            "target_quantize": 4, "target_steps": 4, "target_size": 512,
             "attacker_model": ATTACKER_DEFAULT, "rate_limit_per_min": 60,
             "max_t2i_calls": None, "allow_swap": False, "no_aggressive_unload": False,
             "seeds_filter": None, "run_baseline": False, "output_dir": "results",
@@ -248,11 +248,11 @@ class TestPreflightRam:
 
     def test_q8_without_aggressive_unload_exceeds_budget(self):
         from ouroboros.web.runner import preflight_ram
-        # flux_quantize=8 → target=8 GB; dolphin-llama3=5 GB; sum=13 GB = budget → borderline
+        # target_quantize=8 → target=8 GB; dolphin-llama3=5 GB; sum=13 GB = budget → borderline
         ok, msg = preflight_ram({
             "mode": "test",
             "judge_backend": "mlx", "judge_model": "",
-            "flux_quantize": 8, "flux_steps": 4, "flux_size": 512,
+            "target_quantize": 8, "target_steps": 4, "target_size": 512,
             "attacker_model": ATTACKER_DEFAULT, "rate_limit_per_min": 60,
             "max_t2i_calls": None, "allow_swap": False,
             "no_aggressive_unload": True,  # sum = 8+5=13 GB

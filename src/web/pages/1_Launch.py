@@ -84,20 +84,22 @@ with st.form("launch_form"):
             help=f"Leave blank to use the default for the selected backend ({default_judge_model}).",
         )
 
+    # The dashboard launches the mflux backend only; the CUDA backends
+    # (diffusers, qwen-image) are CLI-only via --target-backend.
     st.subheader("Target — FLUX")
     col_e, col_f, col_g = st.columns(3)
     with col_e:
-        flux_quantize = st.selectbox(
+        target_quantize = st.selectbox(
             "Quantization bits", [3, 4, 5, 6, 8, 16], index=1,
             help="Q4 ≈ 3.5 GB | Q8 ≈ 6.5 GB | 16 (bf16) ≈ 11 GB"
         )
     with col_f:
-        flux_steps = st.number_input(
+        target_steps = st.number_input(
             "Inference steps", min_value=1, max_value=50, value=4, step=1,
             help="4 is recommended for FLUX.2-klein distilled",
         )
     with col_g:
-        flux_size = st.number_input(
+        target_size = st.number_input(
             "Image size (px)", min_value=256, max_value=1024, value=512, step=64,
             help="Applied to both width and height",
         )
@@ -152,9 +154,9 @@ if submitted:
         "run_baseline": run_baseline,
         "judge_backend": judge_backend,
         "judge_model": judge_model.strip() or None,
-        "flux_quantize": flux_quantize,
-        "flux_steps": flux_steps,
-        "flux_size": flux_size,
+        "target_quantize": target_quantize,
+        "target_steps": target_steps,
+        "target_size": target_size,
         "attacker_model": attacker_model,
         "rate_limit_per_min": rate_limit,
         "max_t2i_calls": int(max_t2i_calls) if max_t2i_calls > 0 else None,

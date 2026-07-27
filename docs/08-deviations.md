@@ -417,6 +417,26 @@ Nuova metrica di **severità** threshold-free, complementare all'ASR (frequenza)
 
 **Codice**: `src/metrics/adversarial.py` (nuovo), `src/report.py` (CSV `adversarial_bias_per_seed.csv`/`adversarial_bias_by_category.csv` + wiring template), `src/templates/report.html.j2` (sezione "Adversarial Bias Score"); test: `tests/test_metrics_adversarial.py`.
 
+### A.21 Secondo modello target: backend `qwen-image` + rinomina `flux_*` → `target_*` ✦ NUOVO (v3.1)
+
+Fino a v3.0 entrambi i backend (`flux` via mflux, `diffusers` via CUDA) generavano lo **stesso modello**, FLUX.2-klein-4B: cambiava la piattaforma, non il soggetto della misura. Ogni numero di bias del progetto proveniva quindi da una sola famiglia, e uno skew osservato non era attribuibile al modello piuttosto che a FLUX in generale. Il terzo backend `qwen-image` (Qwen-Image 20B, MMDiT + text encoder Qwen2.5-VL-7B, via diffusers su NVIDIA CUDA) rende possibile la domanda. Copre il "lavoro di codice richiesto" annotato in `tesi-skeleton.md` §4.4 limitatamente al secondo modello: la generalizzazione a `model_id` arbitrario per la fascia "solo census" (SDXL, SD 3.5, PixArt-Σ) resta da fare.
+
+Due differenze sostanziali rispetto al backend FLUX, entrambe conseguenze della taglia:
+
+- **Si quantizzano transformer e text encoder insieme.** Qwen2.5-VL-7B pesa ~15 GB in bfloat16: quantizzare il solo transformer come fa `diffusers_flux.py` non basterebbe. `_load()` usa `PipelineQuantizationConfig(..., components_to_quantize=["transformer", "text_encoder"])` → ~18 GB VRAM a NF4, cioè una scheda da 24 GB invece di una A100 80 GB.
+- **L'unload aggressivo diventa controproducente.** `loop.py` scarica il target dopo ogni batch; per un 20B significa ri-quantizzare a ogni iterazione. La CLI emette un warning che consiglia `--no-aggressive-unload`, sicuro perché `enable_model_cpu_offload()` tiene comunque i pesi in RAM di sistema.
+
+I parametri di sampling **non sono trasferibili** tra i due modelli — klein è guidance-distilled (4 step, guidance 1.0), Qwen-Image no (50 step, `true_cfg_scale=4.0`, 1024 px nativi). Da qui la rinomina: i campi `RunConfig.flux_*` diventano `target_*`, i flag `--target-steps` / `--target-size` / `--target-quantize` hanno `default=None` e vengono risolti per backend da `config.resolve_target_params()` contro la tabella `TARGET_DEFAULTS`. Le vecchie grafie `--flux-*` restano come alias sugli stessi `dest`. `RunConfig` continua a registrare valori **già risolti**, così `meta.json` dice cosa è stato davvero eseguito.
+
+Due conseguenze da mettere in conto:
+
+- **`config_hash` cambia per tutte le config**, quindi i `run_id` futuri non sono confrontabili con quelli passati per hash. I run già su disco non sono toccati e restano leggibili da `report`/`aggregate`.
+- **`--replay` di un run pre-rinomina continua a funzionare**: `replay.py` legge la chiave nuova con fallback su quella vecchia. Nella stessa occasione è stato corretto un bug preesistente — `target_backend` non veniva affatto ricostruito da `meta.json`, quindi il replay di un run CUDA ricadeva silenziosamente su mflux.
+
+**Codice**: `src/targets/qwen_image.py` (nuovo), `src/targets/base.py` (terzo case + rinomina kwargs), `src/config.py` (`TARGET_DEFAULTS`, `resolve_target_params`, campi `target_*`, voci VRAM in `MODEL_SIZE_REGISTRY`), `src/cli.py` (choices, alias, risoluzione, warning unload), `src/replay.py` (fix backend + fallback), `src/web/runner.py`, `src/web/pages/1_Launch.py`; test: `tests/test_targets_factory.py` (nuovo), `tests/test_replay.py`, `tests/test_web_runner.py`.
+
+La dashboard resta volutamente **flux-only**: non espone un selettore di backend, i due target CUDA si raggiungono solo da CLI.
+
 ---
 
 ## B. Differenze rispetto al design contract v1

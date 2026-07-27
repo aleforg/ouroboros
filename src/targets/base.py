@@ -58,41 +58,61 @@ class TargetBackend(Protocol):
 
 
 def build_target(
-    backend: Literal["flux", "diffusers"] = "flux",
+    backend: Literal["flux", "diffusers", "qwen-image"] = "flux",
     *,
-    flux_quantize: int = 4,
-    flux_steps: int = 4,
-    flux_width: int = 512,
-    flux_height: int = 512,
-    flux_seed_base: int = 42,
+    target_quantize: int = 4,
+    target_steps: int = 4,
+    target_width: int = 512,
+    target_height: int = 512,
+    target_seed_base: int = 42,
 ) -> TargetBackend:
     """Factory for target backends.
 
-    ``flux``      — FLUX.2-klein-4B via mflux (Apple Silicon only).
-    ``diffusers`` — FLUX.2-klein-4B via HuggingFace diffusers + NVIDIA CUDA.
-                    Requires ``pip install -e '.[diffusers]'``.
+    ``flux``       — FLUX.2-klein-4B via mflux (Apple Silicon only).
+    ``diffusers``  — FLUX.2-klein-4B via HuggingFace diffusers + NVIDIA CUDA.
+    ``qwen-image`` — Qwen-Image 20B via HuggingFace diffusers + NVIDIA CUDA.
+
+    Both CUDA backends require ``pip install -e '.[diffusers]'``. Their heavy
+    imports live inside the backend's ``_load()``, so constructing any target
+    here is safe on a machine where the extra is not installed.
+
+    The sampling params are not interchangeable across backends — see
+    ``config.TARGET_DEFAULTS`` / ``config.resolve_target_params``, which is
+    what callers should use to fill them in.
     """
     if backend == "flux":
         from ouroboros.targets.flux import FluxLocalTarget
 
         return FluxLocalTarget(
-            quantize=flux_quantize,
-            steps=flux_steps,
-            width=flux_width,
-            height=flux_height,
-            seed_base=flux_seed_base,
+            quantize=target_quantize,
+            steps=target_steps,
+            width=target_width,
+            height=target_height,
+            seed_base=target_seed_base,
         )
     if backend == "diffusers":
         from ouroboros.targets.diffusers_flux import FluxDiffusersTarget
 
         return FluxDiffusersTarget(
-            steps=flux_steps,
-            width=flux_width,
-            height=flux_height,
-            quantize_bits=flux_quantize,
-            seed_base=flux_seed_base,
+            steps=target_steps,
+            width=target_width,
+            height=target_height,
+            quantize_bits=target_quantize,
+            seed_base=target_seed_base,
+        )
+    if backend == "qwen-image":
+        from ouroboros.targets.qwen_image import QwenImageTarget
+
+        return QwenImageTarget(
+            steps=target_steps,
+            width=target_width,
+            height=target_height,
+            quantize_bits=target_quantize,
+            seed_base=target_seed_base,
         )
     raise ValueError(
-        f"Unknown target backend {backend!r}. "
-        "Supported: 'flux' (Apple Silicon/mflux), 'diffusers' (NVIDIA CUDA)."
+        f"Unknown target backend {backend!r}. Supported: "
+        "'flux' (FLUX.2-klein, Apple Silicon/mflux), "
+        "'diffusers' (FLUX.2-klein, NVIDIA CUDA), "
+        "'qwen-image' (Qwen-Image 20B, NVIDIA CUDA)."
     )

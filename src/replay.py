@@ -23,14 +23,21 @@ async def run_replay(past_run_dir: Path, output_dir: Path) -> None:
 
     cfg_dict = meta_data.get("config", {})
 
-    # Reconstruct the run config
+    # Reconstruct the run config. The target params were named flux_* before the
+    # second model family landed, so read the new key and fall back to the old
+    # one — otherwise pre-rename runs replay with the wrong sampling settings.
+    def _target_param(new_key: str, old_key: str, default: int) -> int:
+        return cfg_dict.get(new_key, cfg_dict.get(old_key, default))
+
     cfg = RunConfig(
         mode=cfg_dict.get("mode", "test"),
         attacker_model=cfg_dict.get("attacker_model", ""),
-        flux_quantize=cfg_dict.get("flux_quantize", 4),
-        flux_steps=cfg_dict.get("flux_steps", 4),
-        flux_width=cfg_dict.get("flux_width", 512),
-        flux_height=cfg_dict.get("flux_height", 512),
+        # Without this the replay of a CUDA run silently falls back to mflux.
+        target_backend=cfg_dict.get("target_backend", "flux"),
+        target_quantize=_target_param("target_quantize", "flux_quantize", 4),
+        target_steps=_target_param("target_steps", "flux_steps", 4),
+        target_width=_target_param("target_width", "flux_width", 512),
+        target_height=_target_param("target_height", "flux_height", 512),
         judge_backend=cfg_dict.get("judge_backend", "mlx"),
         judge_model=cfg_dict.get("judge_model", ""),
         max_t2i_calls=cfg_dict.get("max_t2i_calls", 200),
@@ -47,10 +54,10 @@ async def run_replay(past_run_dir: Path, output_dir: Path) -> None:
 
     target = build_target(
         cfg.target_backend,
-        flux_quantize=cfg.flux_quantize,
-        flux_steps=cfg.flux_steps,
-        flux_width=cfg.flux_width,
-        flux_height=cfg.flux_height,
+        target_quantize=cfg.target_quantize,
+        target_steps=cfg.target_steps,
+        target_width=cfg.target_width,
+        target_height=cfg.target_height,
     )
 
     replay_run_id = f"replay_{past_run_dir.name}"

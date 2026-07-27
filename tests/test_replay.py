@@ -18,10 +18,10 @@ async def test_run_replay_success(mock_build_target, tmp_path):
     meta = {
         "config": {
             "mode": "test",
-            "flux_quantize": 4,
-            "flux_steps": 4,
-            "flux_width": 512,
-            "flux_height": 512,
+            "target_quantize": 4,
+            "target_steps": 4,
+            "target_width": 512,
+            "target_height": 512,
         }
     }
     (past_run_dir / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
@@ -123,3 +123,77 @@ async def test_run_replay_success(mock_build_target, tmp_path):
     assert summary["matched"] == 1
     assert summary["total"] == 2
     assert summary["match_rate"] == 50.0
+
+
+def _write_minimal_run(run_dir: Path, config: dict) -> None:
+    """Past run with one prompt, enough for run_replay to reach build_target."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "meta.json").write_text(json.dumps({"config": config}), encoding="utf-8")
+    record = {
+        "seed_id": "seed-1",
+        "target_prompt": "run prompt 1",
+        "iter": 0,
+        "samples": [{"path": "images/seed-1/iter_00/sample_0.png", "sha256": "h"}],
+    }
+    (run_dir / "run.jsonl").write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+
+def _replay_target_mock() -> MagicMock:
+    target = MagicMock()
+    target.generate_m = AsyncMock(
+        return_value=[SampleResult(outcome="image", image_bytes=b"bytes")]
+    )
+    target.aclose = AsyncMock()
+    return target
+
+
+@pytest.mark.anyio
+@patch("ouroboros.replay.build_target")
+async def test_replay_reuses_the_recorded_backend(mock_build_target, tmp_path):
+    """A CUDA run must not replay through mflux.
+
+    ``target_backend`` used to be missing from the config reconstruction, so a
+    diffusers/qwen-image run silently replayed on the mflux default — which on a
+    CUDA box fails at import.
+    """
+    past_run_dir = tmp_path / "results" / "2026-05-19_120000_abc12345"
+    _write_minimal_run(past_run_dir, {
+        "mode": "test",
+        "target_backend": "qwen-image",
+        "target_quantize": 4,
+        "target_steps": 50,
+        "target_width": 1024,
+        "target_height": 1024,
+    })
+    mock_build_target.return_value = _replay_target_mock()
+
+    await run_replay(past_run_dir, tmp_path / "results")
+
+    args, kwargs = mock_build_target.call_args
+    assert args[0] == "qwen-image"
+    assert kwargs["target_steps"] == 50
+    assert kwargs["target_width"] == 1024
+
+
+@pytest.mark.anyio
+@patch("ouroboros.replay.build_target")
+async def test_replay_reads_pre_rename_flux_params(mock_build_target, tmp_path):
+    """Runs recorded before the flux_* → target_* rename stay replayable."""
+    past_run_dir = tmp_path / "results" / "2026-05-19_120000_def67890"
+    _write_minimal_run(past_run_dir, {
+        "mode": "test",
+        "flux_quantize": 8,
+        "flux_steps": 6,
+        "flux_width": 768,
+        "flux_height": 768,
+    })
+    mock_build_target.return_value = _replay_target_mock()
+
+    await run_replay(past_run_dir, tmp_path / "results")
+
+    args, kwargs = mock_build_target.call_args
+    assert args[0] == "flux"  # absent from old meta.json → mflux default
+    assert kwargs["target_quantize"] == 8
+    assert kwargs["target_steps"] == 6
+    assert kwargs["target_width"] == 768
+    assert kwargs["target_height"] == 768

@@ -24,7 +24,7 @@ Tutti e tre operano su testo, e il judge legge l'output testuale del target.
 | Componente | PAIR originale | Ouroboros |
 |---|---|---|
 | **Attacker** | LLM uncensored | LLM uncensored (Ollama, locale) |
-| **Target** | LLM black-box | T2I locale: FLUX.2-klein-4B via mflux (Apple Silicon) o FLUX.1-schnell via diffusers (NVIDIA CUDA) |
+| **Target** | LLM black-box | T2I locale: FLUX.2-klein-4B via mflux (Apple Silicon), FLUX.2-klein-4B o Qwen-Image 20B via diffusers (NVIDIA CUDA) |
 | **Judge** | LLM che *assegna un punteggio* 1–10 | **VLM locale** (Qwen3-VL-8B, MLX o Ollama) che *assegna un'etichetta* |
 
 Due delta rispetto al paper originale, entrambi importanti:
@@ -77,11 +77,13 @@ test-retest multi-run — è **analisi esplorativa o lavoro futuro**.
 
 ## Non-goals
 
-- **Comparare più target T2I**: sono cablati due backend FLUX (mflux locale e
-  diffusers CUDA), ma il confronto sistematico tra modelli diversi (SD 1.5,
-  DALL-E, Imagen) è fuori dai claim. La factory `build_target()` in
-  `src/targets/base.py` rende l'aggiunta di un backend una modifica a un file
-  solo.
+- **Comparare più target T2I**: sono cablati tre backend — due per FLUX.2-klein
+  (mflux locale e diffusers CUDA) e uno per Qwen-Image 20B (diffusers CUDA) —
+  ma il confronto *sistematico* tra modelli, con seed e budget appaiati e
+  intervalli di confidenza, non è ancora tra i claim: due modelli rendono
+  possibile la domanda "è il modello o è la famiglia FLUX?", non la rispondono.
+  La factory `build_target()` in `src/targets/base.py` rende l'aggiunta di un
+  backend una modifica a un file solo.
 - **Attacchi white-box** (gradient-based): l'attacker vede solo gli output.
 - **Dialoghi multi-turn col target**: ogni iterazione è una singola chiamata T2I
   con un prompt nuovo. La memoria vive nell'attacker, non nel target.
@@ -131,9 +133,10 @@ Se la RAM stimata sfora il budget (`RAM_BUDGET_GB`, **13 GB**), la CLI **aborta
 lo startup** a meno di `--allow-swap`. La logica è in
 `src/config.py:check_ram_budget`.
 
-Per run più grandi esiste la via d'uscita cloud-GPU: `--target-backend
-diffusers` esegue FLUX.1-schnell su NVIDIA CUDA (RunPod, Lambda, Colab) con lo
-stesso loop e lo stesso judge.
+Per run più grandi esiste la via d'uscita cloud-GPU, con lo stesso loop e lo
+stesso judge: `--target-backend diffusers` esegue FLUX.2-klein-4B su NVIDIA CUDA
+(RunPod, Lambda, Colab), `--target-backend qwen-image` esegue Qwen-Image 20B
+(~18 GB VRAM a 4-bit, quindi da una 24 GB in su).
 
 ## Dataset dei seed
 

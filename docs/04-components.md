@@ -95,22 +95,28 @@ class TargetBackend(Protocol):
     async def aclose(self) -> None: ...  # libera RAM; no-op per cloud
 ```
 
-La factory `build_target(backend, **kwargs)` (`src/targets/base.py:build_target`) costruisce l'implementazione corretta. In v2.4 esiste un solo backend (`"flux"`), e qualunque altro nome lancia `ValueError`. Aggiungere un target futuro (DALL-E, Imagen, Stable Diffusion) significa:
-1. creare `src/targets/<nome>.py` che implementa il Protocol
-2. registrare il case nella factory + estendere `Literal[...]` in `config.py:RunConfig`
-3. re-aggiungere il flag `--target-backend` in `cli.py`
+La factory `build_target(backend, **kwargs)` (`src/targets/base.py:build_target`) costruisce l'implementazione corretta; qualunque nome non registrato lancia `ValueError`. Aggiungere un target futuro (DALL-E, Imagen, Stable Diffusion) significa:
+1. creare `src/targets/<nome>.py` che implementa il Protocol, con gli import pesanti **dentro `_load()`** — così costruire il target resta possibile anche dove la dipendenza non è installata (è ciò che permette `--dry-run` su un laptop)
+2. registrare il case nella factory + estendere `Literal[...]` in `config.py` (`TARGET_BACKEND_DEFAULT` e il campo `RunConfig.target_backend`)
+3. aggiungere il nome a `choices` di `--target-backend` in `cli.py`
+4. aggiungere una riga a `config.TARGET_DEFAULTS` con i suoi step/size/quantize di default
 
-### Backend: FLUX.2 klein locale (unico backend)
+Il punto 4 non è opzionale: i parametri di sampling **non sono trasferibili** tra modelli. I flag `--target-steps` / `--target-size` / `--target-quantize` hanno `default=None` e vengono risolti da `config.resolve_target_params()` contro il backend scelto, perché 4 step vanno bene per un modello guidance-distilled e producono rumore su uno non distillato.
 
-| Backend | Modello | Piattaforma | RAM/VRAM | M calls | Refusal |
+### Backend disponibili
+
+| Backend | Modello | Piattaforma | RAM/VRAM | Default steps / size | Refusal |
 |---|---|---|---|---|---|
-| **flux** *(default)* | FLUX.2-klein-4B (distilled) @ 4-bit via mflux ≥0.17 | Apple Silicon (MLX/Metal) | ~5 GB picco | **sequenziali** | nessuno (no safety filter) |
-| **diffusers** | FLUX.1-schnell via HuggingFace diffusers | NVIDIA CUDA | ~7 GB @ NF4, ~14 GB @ 8-bit, ~26 GB @ bf16 | sequenziali | nessuno |
+| **flux** *(default)* | FLUX.2-klein-4B (distilled) @ 4-bit via mflux ≥0.17 | Apple Silicon (MLX/Metal) | ~5 GB picco | 4 / 512 | nessuno (no safety filter) |
+| **diffusers** | FLUX.2-klein-4B via HuggingFace diffusers | NVIDIA CUDA | ~3.5 GB @ NF4, ~6.5 GB @ 8-bit, ~11 GB @ bf16 | 4 / 512 | nessuno |
+| **qwen-image** | Qwen-Image 20B (MMDiT + text encoder Qwen2.5-VL-7B) via diffusers | NVIDIA CUDA | ~18 GB @ NF4, ~30 GB @ 8-bit, ~60 GB @ bf16 | 50 / 1024 | nessuno |
 
-Il secondo backend serve i run su GPU cloud (RunPod, Lambda, Colab) dove mflux
-non è disponibile, ed è un drop-in di `FluxLocalTarget` dietro lo stesso
-Protocol; richiede l'extra `[diffusers]`. Il backend Vertex cloud è stato rimosso
-in v2.4 — vedere [08-deviations.md](08-deviations.md) A.14.
+Tutti e tre generano le M immagini **sequenzialmente**. I due backend CUDA servono i run su GPU cloud (RunPod, Lambda, Colab) dove mflux non è disponibile e richiedono l'extra `[diffusers]`; il backend Vertex cloud è stato rimosso in v2.4 — vedere [08-deviations.md](08-deviations.md) A.14.
+
+`qwen-image` è il secondo *modello*, non solo la seconda piattaforma: senza di esso ogni misura del progetto proviene dalla famiglia FLUX, e un bias osservato non è attribuibile al modello. Due note operative:
+
+- **Quantizza anche il text encoder.** Qwen2.5-VL-7B da solo pesa ~15 GB in bfloat16, quindi `_load()` usa `PipelineQuantizationConfig(..., components_to_quantize=["transformer", "text_encoder"])` invece di costruire a mano il solo transformer come fa il backend FLUX. È questo che lo fa entrare in 24 GB.
+- **Va usato con `--no-aggressive-unload`.** Con l'unload aggressivo (default) il loop scarica il target dopo ogni batch, e ricaricarlo significa ri-quantizzare un modello da 20B a ogni iterazione. La CLI emette un warning esplicito allo startup. La pressione VRAM a riposo resta comunque bassa perché `enable_model_cpu_offload()` tiene i pesi in RAM di sistema.
 
 ### FLUX.2 klein locale — dettagli
 
@@ -121,7 +127,7 @@ Model:    FLUX.2-klein-4B (Black Forest Labs, released gennaio 2026)
 Library:  mflux >= 0.17 (porta nativa MLX di Diffusers)
 Quantize: 4-bit (default), configurabile 3/4/5/6/8-bit
 Steps:    4 (klein distilled è ottimizzato per pochi step)
-Size:     512×512 px (default), configurabile via --flux-size
+Size:     512×512 px (default), configurabile via --target-size
 RAM:      ~5 GB picco @ 4-bit;  ~8 GB @ 8-bit;  ~17-18 GB senza quantizzazione (bf16)
 ```
 
@@ -163,15 +169,15 @@ class FluxLocalTarget:
 
 **Seed espliciti**: FLUX espone `seed` per chiamata → M immagini usano `seed_base + i` → i risultati sono **esattamente riproducibili** tra run (a parità di pesi e quantizzazione).
 
-**M immagini sequenziali**: mflux è sincrono e bind-thread (MLX lega lo stream GPU al thread). Il loop chiama `generate_image` M volte sullo stesso thread dell'event loop asyncio (no `to_thread`). Throughput su M4: ~9-15 s/img a 512×512 con `--flux-quantize 4`. Per `m=2, max_iter=5` (test mode) = max 10 immagini = ~90-150 s.
+**M immagini sequenziali**: mflux è sincrono e bind-thread (MLX lega lo stream GPU al thread). Il loop chiama `generate_image` M volte sullo stesso thread dell'event loop asyncio (no `to_thread`). Throughput su M4: ~9-15 s/img a 512×512 con `--target-quantize 4`. Per `m=2, max_iter=5` (test mode) = max 10 immagini = ~90-150 s.
 
 **Safety filter**: FLUX.2 klein non ha filtri di sicurezza integrati. L'outcome è sempre `"image"` o `"error"` — mai `"refused"`. Il refusal-pivot di `loop.py` diventa quindi un no-op con questo backend.
 
 **Trade-off qualità**: a 4-bit + 512×512 + 4 step le immagini presentano mani e
 volti imperfetti, ma restano leggibili per il compito del judge — la
 classificazione del genere percepito del soggetto principale. Una
-configurazione a qualità superiore si ottiene con `--flux-quantize 8
---flux-size 768`, al costo di RAM e tempo. Quanto la degradazione a 4-bit
+configurazione a qualità superiore si ottiene con `--target-quantize 8
+--target-size 768`, al costo di RAM e tempo. Quanto la degradazione a 4-bit
 influisca sulla lettura è quantificabile: è l'unclear rate di
 [06-metrics.md](06-metrics.md) §5.
 

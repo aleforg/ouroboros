@@ -24,6 +24,7 @@ from ouroboros.config import (
     TARGET_BACKEND_DEFAULT,
     RunConfig,
     check_ram_budget,
+    resolve_target_params,
 )
 from ouroboros.seeds import load_full_seeds, load_test_seeds
 from ouroboros.storage import (
@@ -82,17 +83,25 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--attacker-model", default=ATTACKER_DEFAULT)
     # target
     run_p.add_argument(
-        "--target-backend", choices=["flux", "diffusers"], default=TARGET_BACKEND_DEFAULT,
-        dest="target_backend",
+        "--target-backend", choices=["flux", "diffusers", "qwen-image"],
+        default=TARGET_BACKEND_DEFAULT, dest="target_backend",
         help="flux: FLUX.2-klein-4B via mflux (Apple Silicon, default) | "
-             "diffusers: FLUX.1-schnell via HuggingFace diffusers (NVIDIA CUDA, RunPod)",
+             "diffusers: FLUX.2-klein-4B via HuggingFace diffusers (NVIDIA CUDA, RunPod) | "
+             "qwen-image: Qwen-Image 20B via diffusers (NVIDIA CUDA, ~18 GB VRAM at 4-bit)",
     )
-    run_p.add_argument("--flux-quantize", type=int, choices=[3, 4, 5, 6, 8, 16], default=4,
-                       dest="flux_quantize", metavar="BITS")
-    run_p.add_argument("--flux-steps", type=int, default=4, dest="flux_steps",
-                       help="FLUX inference steps (default: 4 for klein distilled)")
-    run_p.add_argument("--flux-size", type=int, default=512, dest="flux_size",
-                       metavar="PX", help="Image size in pixels, applied to both width and height")
+    # The --flux-* spellings are kept as aliases: these knobs predate the second
+    # model family. Defaults are None and resolved per backend afterwards, since
+    # klein (4 steps / 512 px) and Qwen-Image (50 steps / 1024 px) disagree.
+    run_p.add_argument("--target-quantize", "--flux-quantize", type=int,
+                       choices=[3, 4, 5, 6, 8, 16], default=None,
+                       dest="target_quantize", metavar="BITS")
+    run_p.add_argument("--target-steps", "--flux-steps", type=int, default=None,
+                       dest="target_steps",
+                       help="Inference steps (default: 4 for klein distilled, 50 for qwen-image)")
+    run_p.add_argument("--target-size", "--flux-size", type=int, default=None,
+                       dest="target_size", metavar="PX",
+                       help="Image size in pixels, applied to both width and height "
+                            "(default: 512 for klein, 1024 for qwen-image)")
     # judge
     run_p.add_argument("--judge-backend", choices=["mlx", "ollama"], default=JUDGE_BACKEND_DEFAULT)
     run_p.add_argument("--judge-model", default=None,
@@ -194,17 +203,22 @@ def _cmd_run(args: argparse.Namespace) -> None:
     google_project = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
     google_location = os.environ.get("GOOGLE_CLOUD_LOCATION", "")
     aggressive_unload = not getattr(args, "no_aggressive_unload", False)
-    flux_size = getattr(args, "flux_size", 512)
 
     target_backend = getattr(args, "target_backend", TARGET_BACKEND_DEFAULT)
+    target_steps, target_size, target_quantize = resolve_target_params(
+        target_backend,
+        steps=getattr(args, "target_steps", None),
+        size=getattr(args, "target_size", None),
+        quantize=getattr(args, "target_quantize", None),
+    )
     cfg = RunConfig(
         mode=args.mode,
         attacker_model=args.attacker_model,
         target_backend=target_backend,
-        flux_quantize=args.flux_quantize,
-        flux_steps=args.flux_steps,
-        flux_width=flux_size,
-        flux_height=flux_size,
+        target_quantize=target_quantize,
+        target_steps=target_steps,
+        target_width=target_size,
+        target_height=target_size,
         judge_backend=args.judge_backend,
         judge_model=judge_model,
         max_t2i_calls=args.max_t2i_calls,
@@ -220,9 +234,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
         google_cloud_location=google_location,
     )
 
-    # RAM budget check — mflux only (diffusers target lives on VRAM, not system RAM)
+    # RAM budget check — mflux only (CUDA targets live on VRAM, not system RAM)
     if cfg.target_backend == "flux":
-        _target_registry_key = f"flux2-klein-4b-q{cfg.flux_quantize}"
+        _target_registry_key = f"flux2-klein-4b-q{cfg.target_quantize}"
         ok, msg = check_ram_budget(
             cfg.attacker_model, _target_registry_key, RAM_BUDGET_GB, cfg.aggressive_unload
         )
@@ -235,6 +249,17 @@ def _cmd_run(args: argparse.Namespace) -> None:
         logger.info(
             "target_backend=%s: skipping system RAM budget check (VRAM-based target).",
             cfg.target_backend,
+        )
+
+    # Aggressive unload drops the target after every batch (loop.py). For a 20B
+    # model that means re-quantizing on every iteration — minutes of overhead per
+    # batch. Qwen-Image already keeps its weights in system RAM via
+    # enable_model_cpu_offload(), so idle VRAM pressure is low without unloading.
+    if cfg.target_backend == "qwen-image" and cfg.aggressive_unload:
+        logger.warning(
+            "target_backend=qwen-image with aggressive unload: the 20B pipeline is "
+            "re-quantized on every iteration. Pass --no-aggressive-unload unless "
+            "you are deliberately trading time for VRAM."
         )
 
     # Load seeds
@@ -293,10 +318,10 @@ async def _async_run(cfg: RunConfig, seeds: list, args: argparse.Namespace) -> N
 
     target = build_target(
         cfg.target_backend,
-        flux_quantize=cfg.flux_quantize,
-        flux_steps=cfg.flux_steps,
-        flux_width=cfg.flux_width,
-        flux_height=cfg.flux_height,
+        target_quantize=cfg.target_quantize,
+        target_steps=cfg.target_steps,
+        target_width=cfg.target_width,
+        target_height=cfg.target_height,
     )
     judge = build_judge(
         cfg.judge_backend,

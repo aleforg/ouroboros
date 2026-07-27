@@ -5,12 +5,21 @@
 # What it configures for THIS machine only (not committed to the repo):
 #   - target backend: diffusers (FLUX.2-klein-4B/CUDA) — mflux/MLX is Apple-only
 #     and cannot run here at all, so this is a hard requirement, not a choice.
+#     Override with OUROBOROS_TARGET_DEFAULT=qwen-image to make the 20B
+#     Qwen-Image target the flagless default instead.
 #   - judge backend: ollama / qwen3-vl:8b — replaces the repo's Mac-oriented
-#     "gemini" default so `ouroboros run` needs no --judge-backend flag here.
+#     "mlx" default so `ouroboros run` needs no --judge-backend flag here
+#     (mlx-vlm is darwin-gated in pyproject.toml and is not installed here).
 #
 # Recommended flags NOT baked in here (pass them explicitly per run — see the
-# summary printed at the end): --no-aggressive-unload, --flux-quantize 16.
+# summary printed at the end): --no-aggressive-unload, --target-quantize.
 set -euo pipefail
+
+TARGET_DEFAULT="${OUROBOROS_TARGET_DEFAULT:-diffusers}"
+case "$TARGET_DEFAULT" in
+  diffusers|qwen-image) ;;
+  *) echo "OUROBOROS_TARGET_DEFAULT must be 'diffusers' or 'qwen-image' (got '$TARGET_DEFAULT')" >&2; exit 1 ;;
+esac
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -26,7 +35,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e ".[dev,diffusers]"
-pip install bitsandbytes   # needed for --flux-quantize 4/8 (NF4 / int8)
+pip install bitsandbytes   # needed for --target-quantize 4/8 (NF4 / int8)
 
 echo "=== [3/5] Ollama: install, configure, pull models ==="
 if ! command -v ollama &>/dev/null; then
@@ -69,14 +78,20 @@ else
   echo ".env already exists — leaving it as-is (check OLLAMA_MAX_LOADED_MODELS=2 manually)."
 fi
 
-echo "=== [5/5] Local defaults: target=diffusers, judge=ollama ==="
+echo "=== [5/5] Local defaults: target=$TARGET_DEFAULT, judge=ollama ==="
 CONFIG=src/config.py
 
-if grep -q '^TARGET_BACKEND_DEFAULT: Literal\["flux", "diffusers"\] = "flux"' "$CONFIG"; then
-  sed -i 's/^TARGET_BACKEND_DEFAULT: Literal\["flux", "diffusers"\] = "flux"/TARGET_BACKEND_DEFAULT: Literal["flux", "diffusers"] = "diffusers"/' "$CONFIG"
-  echo "  TARGET_BACKEND_DEFAULT -> diffusers"
+# Match the Literal[...] contents loosely: a new backend name added upstream
+# must not turn this patch into a silent no-op, which would leave the box on
+# the mflux default and fail at import time.
+if grep -qE '^TARGET_BACKEND_DEFAULT: Literal\[.*\] = "flux"$' "$CONFIG"; then
+  sed -i -E "s/^(TARGET_BACKEND_DEFAULT: Literal\[.*\] = )\"flux\"$/\1\"$TARGET_DEFAULT\"/" "$CONFIG"
+  echo "  TARGET_BACKEND_DEFAULT -> $TARGET_DEFAULT"
+elif grep -qE "^TARGET_BACKEND_DEFAULT: Literal\[.*\] = \"$TARGET_DEFAULT\"$" "$CONFIG"; then
+  echo "  TARGET_BACKEND_DEFAULT already set to $TARGET_DEFAULT — skipped."
 else
-  echo "  TARGET_BACKEND_DEFAULT already patched or line not found — skipped."
+  echo "  WARNING: TARGET_BACKEND_DEFAULT is neither 'flux' nor '$TARGET_DEFAULT'." >&2
+  grep -n '^TARGET_BACKEND_DEFAULT' "$CONFIG" >&2 || echo "  (line not found at all)" >&2
 fi
 
 if grep -q '^JUDGE_BACKEND_DEFAULT: Literal\["mlx", "ollama"\] = "mlx"' "$CONFIG"; then
@@ -86,23 +101,31 @@ else
   echo "  JUDGE_BACKEND_DEFAULT already patched or line not found — skipped."
 fi
 
-cat <<'SUMMARY'
+cat <<SUMMARY
 
 === Setup complete ===
 
-target and judge now default to diffusers/ollama (qwen3-vl:8b) on this
+target and judge now default to $TARGET_DEFAULT/ollama (qwen3-vl:8b) on this
 machine only — this local patch to src/config.py is NOT meant to be
 committed/pushed (it would flip the default for the Mac dev setup too).
 
 Still pass these explicitly per run (not baked in as defaults):
   --no-aggressive-unload   keeps attacker/target/judge resident (48GB VRAM
                            is plenty; keeps models in GPU memory without swaps)
-  --flux-quantize 16       bfloat16 unquantized FLUX.2-klein-4B (best quality,
-                           ~11GB VRAM, leaving ~37GB for Ollama models resident)
-  --flux-size 1024         1024x1024 resolution (FLUX native scale for best quality)
+  --target-size 1024       1024x1024, the native scale of both target models
+
+  quantization differs per backend — pick the line for the target you use:
+  --target-quantize 16     diffusers:  bfloat16 unquantized FLUX.2-klein-4B
+                           (best quality, ~11GB VRAM, leaves ~37GB for Ollama)
+  --target-quantize 4      qwen-image: NF4 on transformer + text encoder
+                           (~18GB VRAM; bf16 would be ~60GB and will NOT fit)
+
+  Steps are backend-resolved, so leave --target-steps alone unless you mean it:
+  4 for the distilled klein, 50 for the undistilled Qwen-Image.
 
 Sanity check before the full run:
   source .venv/bin/activate
+  python scripts/smoke_qwen.py --steps 4 --size 512   # target only, if using qwen-image
   ouroboros validate-judge --judge-backend ollama --sample 100 ...
-  ouroboros run --mode test --no-aggressive-unload --flux-quantize 16 --flux-size 1024
+  ouroboros run --mode test --no-aggressive-unload --target-size 1024
 SUMMARY

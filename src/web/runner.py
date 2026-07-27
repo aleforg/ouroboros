@@ -29,6 +29,7 @@ from ouroboros.config import (
     RunConfig,
     check_ram_budget,
     config_hash,
+    resolve_target_params,
 )
 from ouroboros.web.data import (
     add_job,
@@ -62,6 +63,13 @@ def _derive_max_t2i(mode: str, max_t2i_calls: int | None) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _opt_int(value: Any) -> int | None:
+    """Form value → int, or None when the field is absent/blank."""
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
 def build_run_cfg(form: dict) -> RunConfig:
     """Build a ``RunConfig`` from a Launch-form dict.
 
@@ -73,15 +81,22 @@ def build_run_cfg(form: dict) -> RunConfig:
     judge_model_raw: str = form.get("judge_model", "") or ""
     judge_model = judge_model_raw.strip() or _JUDGE_DEFAULTS.get(judge_backend, JUDGE_MLX_DEFAULT)
     max_t2i = _derive_max_t2i(mode, form.get("max_t2i_calls") or None)
-    flux_size = int(form.get("flux_size", 512))
+    target_backend: str = form.get("target_backend", TARGET_BACKEND_DEFAULT)
+    # Unset target knobs take the backend's default, exactly as the CLI does.
+    target_steps, target_size, target_quantize = resolve_target_params(
+        target_backend,
+        steps=_opt_int(form.get("target_steps")),
+        size=_opt_int(form.get("target_size")),
+        quantize=_opt_int(form.get("target_quantize")),
+    )
     return RunConfig(
         mode=mode,
         attacker_model=form.get("attacker_model", ATTACKER_DEFAULT),
-        target_backend=form.get("target_backend", TARGET_BACKEND_DEFAULT),
-        flux_quantize=int(form.get("flux_quantize", 4)),
-        flux_steps=int(form.get("flux_steps", 4)),
-        flux_width=flux_size,
-        flux_height=flux_size,
+        target_backend=target_backend,
+        target_quantize=target_quantize,
+        target_steps=target_steps,
+        target_width=target_size,
+        target_height=target_size,
         judge_backend=judge_backend,
         judge_model=judge_model,
         max_t2i_calls=max_t2i,
@@ -111,7 +126,7 @@ def preflight_ram(form: dict) -> tuple[bool, str]:
     cfg = build_run_cfg(form)
     if cfg.target_backend != "flux":
         return True, "VRAM-based target — system RAM budget check skipped."
-    target_key = f"flux2-klein-4b-q{cfg.flux_quantize}"
+    target_key = f"flux2-klein-4b-q{cfg.target_quantize}"
     return check_ram_budget(
         cfg.attacker_model, target_key, RAM_BUDGET_GB, cfg.aggressive_unload
     )
@@ -156,12 +171,15 @@ def build_run_argv(form: dict) -> list[str]:
     if cfg.target_backend != TARGET_BACKEND_DEFAULT:
         argv += ["--target-backend", cfg.target_backend]
 
-    if cfg.flux_quantize != 4:
-        argv += ["--flux-quantize", str(cfg.flux_quantize)]
-    if cfg.flux_steps != 4:
-        argv += ["--flux-steps", str(cfg.flux_steps)]
-    if cfg.flux_width != 512:
-        argv += ["--flux-size", str(cfg.flux_width)]
+    # Compare against the defaults of the *selected* backend, not a global
+    # constant — klein and qwen-image have different ones.
+    d_steps, d_size, d_quantize = resolve_target_params(cfg.target_backend)
+    if cfg.target_quantize != d_quantize:
+        argv += ["--target-quantize", str(cfg.target_quantize)]
+    if cfg.target_steps != d_steps:
+        argv += ["--target-steps", str(cfg.target_steps)]
+    if cfg.target_width != d_size:
+        argv += ["--target-size", str(cfg.target_width)]
 
     if cfg.judge_backend != JUDGE_BACKEND_DEFAULT:
         argv += ["--judge-backend", cfg.judge_backend]

@@ -13,7 +13,7 @@ Adatta l'approccio PAIR (Chao et al., 2023) dal jailbreak testuale alla fairness
 ## Modelli e default
 
 - **Attacker**: `dolphin-llama3:latest` via Ollama (~5 GB, 8B 4-bit).
-- **Target** (default `--target-backend flux`): FLUX.2-klein-4B locale via mflux (~5 GB, Apple Silicon). In alternativa `--target-backend diffusers`: FLUX.1-schnell via HuggingFace diffusers su NVIDIA CUDA, per GPU cloud (extra `[diffusers]`).
+- **Target** (default `--target-backend flux`): FLUX.2-klein-4B locale via mflux (~5 GB, Apple Silicon). Due alternative su GPU cloud NVIDIA, entrambe con l'extra `[diffusers]`: `--target-backend diffusers` (lo stesso FLUX.2-klein-4B via HuggingFace diffusers) e `--target-backend qwen-image` (Qwen-Image 20B, ~18 GB VRAM a 4-bit — secondo modello, serve a distinguere un bias del modello da un bias della famiglia FLUX).
 - **Judge** (default `--judge-backend mlx`): `mlx-community/Qwen3-VL-8B-Instruct-4bit` via `mlx-vlm` (~5 GB, locale). In alternativa `--judge-backend ollama`: `qwen3-vl:8b`. **Non esiste un judge cloud**: attacker, target e judge girano tutti in locale, quindi nessuna immagine generata lascia la macchina e il run non dipende da quote o credenziali.
 
 I tre modelli non sono mai residenti insieme: le fasi sono sequenziali con unload esplicito, quindi il picco di memoria è `max(attacker, target, judge)` ≈ 5 GB e non la somma. Vedi `docs/02-architecture.md`.
@@ -32,7 +32,7 @@ Extra disponibili:
 |---|---|---|
 | `fairface` | `pip install -e ".[fairface]"` | pipeline demografica post-hoc dentro `ouroboros report` |
 | `web` | `pip install -e ".[web]"` | dashboard Streamlit (≥ 1.37) |
-| `diffusers` | `pip install -e ".[diffusers]"` | target FLUX su NVIDIA CUDA (`--target-backend diffusers`) |
+| `diffusers` | `pip install -e ".[diffusers]"` | target su NVIDIA CUDA: `--target-backend diffusers` (FLUX.2-klein) e `--target-backend qwen-image` (Qwen-Image 20B) |
 | `seeds` | `pip install -e ".[seeds]"` | rigenerare `data/stable_bias_prompts.jsonl` dalla sorgente HuggingFace |
 | `dev` | `pip install -e ".[dev]"` | pytest |
 
@@ -58,7 +58,9 @@ ouroboros run --mode test --baseline matched           # baseline senza attacker
 ouroboros run --mode test --baseline single-shot       # baseline legacy a una sola batch per seed
 ouroboros run --mode test --seeds-filter gender        # restringe a un gruppo di seed
 ouroboros run --mode test --judge-backend ollama       # judge via Ollama invece di MLX
-ouroboros run --mode full --target-backend diffusers   # target su NVIDIA CUDA invece di mflux
+ouroboros run --mode full --target-backend diffusers   # FLUX.2-klein su NVIDIA CUDA invece di mflux
+ouroboros run --mode full --target-backend qwen-image --no-aggressive-unload
+                                                       # secondo modello (Qwen-Image 20B) su NVIDIA CUDA
 ouroboros run --resume <run_id>                        # riprende dopo interruzione
 ouroboros run --dry-run                                # elenca seed e crea run dir senza chiamate
 ```
