@@ -47,7 +47,7 @@ echo "=== Pre-flight checks ==="
 command -v ouroboros >/dev/null || { echo "ouroboros not found — did setup_cloud_gpu.sh run?" >&2; exit 1; }
 curl -sf http://localhost:11434/api/tags >/dev/null || { echo "Ollama not responding on localhost:11434" >&2; exit 1; }
 ollama list | grep -q "dolphin-llama3" || { echo "dolphin-llama3 not pulled — run setup_cloud_gpu.sh" >&2; exit 1; }
-ollama list | grep -q "qwen3-vl" || { echo "qwen3-vl:8b not pulled — run setup_cloud_gpu.sh" >&2; exit 1; }
+ollama list | grep -q "qwen3-vl:8b-instruct" || { echo "qwen3-vl:8b-instruct not pulled — run setup_cloud_gpu.sh" >&2; exit 1; }
 nvidia-smi >/dev/null || { echo "nvidia-smi failed — no GPU visible" >&2; exit 1; }
 
 mkdir -p logs
@@ -65,7 +65,7 @@ ouroboros run \
   --baseline \
   --target-backend "$BACKEND" \
   --judge-backend ollama \
-  --judge-model qwen3-vl:8b \
+  --judge-model qwen3-vl:8b-instruct \
   --no-aggressive-unload \
   "${TARGET_ARGS[@]}" \
   "${RESUME_ARGS[@]}" \

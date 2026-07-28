@@ -437,6 +437,22 @@ Due conseguenze da mettere in conto:
 
 La dashboard resta volutamente **flux-only**: non espone un selettore di backend, i due target CUDA si raggiungono solo da CLI.
 
+### A.22 Il judge Ollama deve essere l'edizione *Instruct*, non *Thinking* ✦ FIX (v3.1)
+
+Qwen3-VL esiste in due edizioni, **Instruct** e **Thinking**, e su Ollama il tag nudo `qwen3-vl:8b` è la seconda. `JUDGE_OLLAMA_DEFAULT` puntava lì, mentre `JUDGE_MLX_DEFAULT` era già `Qwen3-VL-8B-Instruct-4bit`: i due backend del judge usavano pesi diversi a seconda della piattaforma, cosa che nessuno aveva notato perché il run FLUX passava `--judge-model qwen3-vl:8b-instruct` esplicitamente da riga di comando.
+
+Il guasto è emerso al primo run su Qwen-Image, lanciato con `run_full_cloud.sh` che aveva il tag nudo cablato. L'edizione Thinking consuma l'intero `num_predict` (4096) dentro `<think>` e restituisce `content` vuoto: **ogni** giudizio diventa `judge_error`. Il danno non è solo la misura persa — un `judge_error` non è un successo, quindi il loop passa all'iterazione successiva e rigenera M immagini che verranno scartate di nuovo, fino a `max_iter`. Un singolo seed può bruciare 20 iterazioni per poi essere **censurato** dall'ASR.
+
+Perché non era mai successo prima: il ragionamento osservato è di ~4.4-4.8k token, appena sopra il tetto, e le immagini di FLUX-klein — scene più semplici, spesso a soggetto singolo — lo tenevano sotto. Le immagini di Qwen-Image contengono più spesso più persone, e il modello ragiona più a lungo. La soglia era già stata superata di poco senza che nulla la segnalasse.
+
+Due tentativi scartati prima del fix definitivo:
+- **`/no_think` nel prompt** (l'interruttore del chat template Qwen3): ignorato da questa build, il thinking è rimasto a 18k caratteri.
+- **Alzare `num_predict` a 8192**: avrebbe funzionato, ma pagando ~5k token di ragionamento a *ogni* chiamata, due volte per iterazione — più tempo del judge che di generazione delle immagini, con il budget GPU raddoppiato.
+
+**Fix**: `JUDGE_OLLAMA_DEFAULT` passa a `qwen3-vl:8b-instruct`, allineando i due backend del judge alla stessa edizione; `setup_cloud_gpu.sh` scarica il tag corretto e `run_full_cloud.sh` lo verifica nei pre-flight. Resta come rete un recupero in `OllamaJudge`: se `content` è vuoto si tenta comunque il parsing del blocco `thinking`, dove il JSON a volte c'è (`_extract_json` tollera la prosa intorno). Non salva un troncamento a metà ragionamento, ma non costa nulla.
+
+**Lezione trasferibile**: il selftest del judge va eseguito con **lo stesso numero di immagini** che usa il loop (`chunk_size = 4`, non le 2 di una prova rapida), altrimenti riproduce una condizione più facile e dà un falso verde.
+
 ---
 
 ## B. Differenze rispetto al design contract v1

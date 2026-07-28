@@ -479,14 +479,7 @@ class OllamaJudge:
             )
 
         b64_images = [base64.b64encode(b).decode() for b in images]
-        # `/no_think` is the Qwen3 chat-template switch for reasoning. The
-        # think=False API flag below is ignored by some Ollama builds, and when
-        # it is, the model spends its whole num_predict budget inside <think>
-        # and returns empty content — every judgement becomes a judge_error.
-        # Seen on Qwen-Image batches, whose busier scenes (multiple people) push
-        # the reasoning past 4k tokens; FLUX batches stayed under it and never
-        # tripped this. Belt and braces: the prompt switch plus the API flag.
-        user_msg = _build_user_msg(base_scene, target_prompt, m) + "\n\n/no_think"
+        user_msg = _build_user_msg(base_scene, target_prompt, m)
 
         messages = [
             {"role": "system", "content": JUDGE_SYSTEM_PROMPT},

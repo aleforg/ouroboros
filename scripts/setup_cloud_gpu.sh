@@ -7,7 +7,7 @@
 #     and cannot run here at all, so this is a hard requirement, not a choice.
 #     Override with OUROBOROS_TARGET_DEFAULT=qwen-image to make the 20B
 #     Qwen-Image target the flagless default instead.
-#   - judge backend: ollama / qwen3-vl:8b — replaces the repo's Mac-oriented
+#   - judge backend: ollama / qwen3-vl:8b-instruct — replaces the repo's Mac-oriented
 #     "mlx" default so `ouroboros run` needs no --judge-backend flag here
 #     (mlx-vlm is darwin-gated in pyproject.toml and is not installed here).
 #
@@ -43,7 +43,7 @@ if ! command -v ollama &>/dev/null; then
 fi
 
 # OLLAMA_MAX_LOADED_MODELS must be >=2 on this box: the attacker
-# (dolphin-llama3) and the judge (qwen3-vl:8b) are both served by the same
+# (dolphin-llama3) and the judge (qwen3-vl:8b-instruct) are both served by the same
 # Ollama daemon. With the default of 1 they would evict each other every
 # iteration even with --no-aggressive-unload, defeating the point of keeping
 # models resident.
@@ -62,7 +62,7 @@ else
 fi
 
 ollama pull dolphin-llama3:latest
-ollama pull qwen3-vl:8b
+ollama pull qwen3-vl:8b-instruct
 
 echo "=== [4/5] .env ==="
 if [ ! -f .env ]; then
@@ -105,7 +105,7 @@ cat <<SUMMARY
 
 === Setup complete ===
 
-target and judge now default to $TARGET_DEFAULT/ollama (qwen3-vl:8b) on this
+target and judge now default to $TARGET_DEFAULT/ollama (qwen3-vl:8b-instruct) on this
 machine only — this local patch to src/config.py is NOT meant to be
 committed/pushed (it would flip the default for the Mac dev setup too).
 

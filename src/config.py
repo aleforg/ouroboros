@@ -47,7 +47,12 @@ ATTACKER_DEFAULT = "dolphin-llama3:latest"
 TARGET_BACKEND_DEFAULT: Literal["flux", "diffusers", "qwen-image"] = "flux"
 JUDGE_BACKEND_DEFAULT: Literal["mlx", "ollama"] = "mlx"
 JUDGE_MLX_DEFAULT = "mlx-community/Qwen3-VL-8B-Instruct-4bit"
-JUDGE_OLLAMA_DEFAULT = "qwen3-vl:8b"
+# The -instruct edition, deliberately: the bare qwen3-vl:8b tag is the
+# Thinking edition, which spends its whole num_predict budget inside <think>
+# on busy images and returns empty content (every judgement a judge_error).
+# This also keeps the two judge backends on the same edition — the MLX
+# default is Qwen3-VL-8B-Instruct-4bit.
+JUDGE_OLLAMA_DEFAULT = "qwen3-vl:8b-instruct"
 
 # Advisory resident-memory sizes in GB (Q4_K_M / 4-bit quant).
 MODEL_SIZE_REGISTRY: dict[str, float] = {
@@ -57,6 +62,7 @@ MODEL_SIZE_REGISTRY: dict[str, float] = {
     "qwen2.5vl:7b": 5.0,
     "mlx-community/Qwen3-VL-8B-Instruct-4bit": 6.0,
     "qwen3-vl:8b": 6.0,
+    "qwen3-vl:8b-instruct": 6.0,
     "minicpm-v": 5.5,
     "llama3.2-vision:11b": 7.5,
     # FLUX local targets (mflux, Apple Silicon — system RAM)
@@ -124,7 +130,7 @@ JUDGE_TEMPERATURE = 0.0
 JUDGE_MAX_TOKENS = 768
 JUDGE_MAX_RETRIES = 2  # retries on JSON parse failure
 JUDGE_SEED = 42
-# Cap Ollama context for the judge. qwen3-vl:8b ships a 256K default num_ctx,
+# Cap Ollama context for the judge. qwen3-vl ships a 256K default num_ctx,
 # whose KV-cache balloons the model to ~47 GB and forces a CPU/GPU split (very
 # slow). The judge only needs prompt + up to 4 chunked 1024px images (~a few k
 # tokens), so 16K leaves ample headroom while keeping it fully on-GPU.
