@@ -118,13 +118,19 @@ def main() -> int:
     print(f"generate:  {elapsed:6.0f}s for {len(results)} images → {per_image:.0f}s each")
     print(f"peak VRAM: {peak:6.1f} GB")
 
-    # The per-image figure is the one that decides whether a full run is
-    # feasible: worst case is 175 seeds × M=8 × max_iter=20 = 28k images, and
-    # --baseline matched roughly doubles it.
-    print(f"\nAt {per_image:.0f}s/image a worst-case paired full run "
-          f"(~56k images) would take {56_000 * per_image / 3600:.0f}h "
-          f"({56_000 * per_image / 86_400:.1f} days) of target time alone, "
-          "judge excluded.")
+    # Two projections, because the worst case overstates by ~15x. The bound is
+    # 175 seeds × M=8 × max_iter=20, doubled by the matched baseline. The likely
+    # figure comes from the realized volume of the FLUX full run
+    # (results/2026-07-16_191548_eb25e79c): the attacker succeeded at a median of
+    # 1 iteration, so only 1896 iterative + 1896 baseline images were ever made.
+    # It assumes Qwen-Image yields as readily as FLUX — which the pilot measures,
+    # and which is the single biggest unknown in any estimate here.
+    for label, images in (("likely (FLUX-realized volume)", 3_792),
+                          ("worst case (every seed to max_iter)", 56_000)):
+        secs = images * per_image
+        print(f"\n{label}: {images:,} images × {per_image:.0f}s = "
+              f"{secs / 3600:.0f}h ({secs / 86_400:.1f} days) of target time, "
+              "judge excluded.")
     if args.steps != 50 or args.size != 1024:
         print("NOTE: measured at non-default settings — re-run without flags "
               "for the number that actually applies to a real run.")
