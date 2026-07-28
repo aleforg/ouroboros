@@ -354,12 +354,12 @@ async def _async_run(cfg: RunConfig, seeds: list, args: argparse.Namespace) -> N
     if cfg.run_baseline and cfg.baseline_mode == "matched":
         logger.info("─── baseline (budget-matched) ───")
         baseline_writer = JSONLWriter(run_dir / "baseline.jsonl")
-        from ouroboros.baseline import completed_baseline_seeds
+        from ouroboros.baseline import baseline_batches_per_seed
 
         await run_baseline(
             seeds, cfg, target, judge, baseline_writer, run_dir,
             batches_per_seed=batches_per_seed,
-            skip_seed_ids=completed_baseline_seeds(run_dir),
+            already_drawn=baseline_batches_per_seed(run_dir),
         )
 
     ended_at = datetime.now(timezone.utc).isoformat()

@@ -16,18 +16,18 @@ from ouroboros.targets import TargetBackend
 logger = logging.getLogger(__name__)
 
 
-def completed_baseline_seeds(run_dir: Path) -> set[str]:
-    """Seed ids that already have baseline rows in this run directory.
+def baseline_batches_per_seed(run_dir: Path) -> dict[str, int]:
+    """How many baseline batches each seed already has in this run directory.
 
-    Without this a resumed run re-generates the comparator for every seed it
-    already covered: wasted images, duplicate rows, and — since the resumed
-    session's batches_per_seed cannot describe them — a comparator built on the
-    wrong number of draws.
+    Counts rather than a done/not-done flag, because a resume has to *top up*:
+    a seed the loop covered before the cap stopped it may already hold a
+    one-batch comparator while its iterative side spent several, and skipping it
+    wholesale would freeze that mismatch into the paired comparison.
     """
     path = run_dir / "baseline.jsonl"
-    done: set[str] = set()
+    drawn: dict[str, int] = {}
     if not path.exists():
-        return done
+        return drawn
     with path.open("r", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
@@ -38,8 +38,8 @@ def completed_baseline_seeds(run_dir: Path) -> set[str]:
             except json.JSONDecodeError:
                 continue
             if seed_id:
-                done.add(seed_id)
-    return done
+                drawn[seed_id] = drawn.get(seed_id, 0) + 1
+    return drawn
 
 
 async def run_baseline(
@@ -50,7 +50,7 @@ async def run_baseline(
     writer: JSONLWriter,
     run_dir: Path,
     batches_per_seed: dict[str, int] | None = None,
-    skip_seed_ids: set[str] | None = None,
+    already_drawn: dict[str, int] | None = None,
 ) -> None:
     """Static-prompt comparator: generate images directly from ``base_scene``,
     no attacker.
@@ -63,8 +63,14 @@ async def run_baseline(
       generating images on that seed (passed in ``batches_per_seed``). The
       report keeps the best batch per seed on both sides, so matching the number
       of draws is what makes ΔASR/ΔABS reflect the attacker's *search* rather
-      than the mechanical advantage of taking a max over more draws. Falls back
-      to one batch for any seed absent from the map.
+      than the mechanical advantage of taking a max over more draws. A seed
+      absent from the map was never reached by the loop — the T2I cap stopped it
+      first — and is skipped: there is nothing for its comparator to mirror.
+
+    ``already_drawn`` (seed -> batches already in baseline.jsonl) makes this
+    resumable: only the missing batches are generated, so a seed left with a
+    partial comparator by an earlier session is topped up rather than either
+    duplicated or frozen at the wrong count.
 
     Success is not decided here — outcomes are logged as fail/refused and the
     report recomputes the label-based N-of-M rule symmetrically for both sides.
@@ -72,21 +78,36 @@ async def run_baseline(
     budget = cfg.budget
     matched = cfg.baseline_mode == "matched" and batches_per_seed is not None
     t_calls = 0
+    drawn = already_drawn or {}
 
-    skip = skip_seed_ids or set()
-    pending = [s for s in seeds if s.seed_id not in skip]
-    if skip:
+    # In matched mode the comparator exists to mirror the loop's realized draws,
+    # so a seed the loop never reached — because the T2I cap stopped it early —
+    # has nothing to mirror. Generating one anyway spends images on a row that
+    # can never be paired.
+    todo: list[tuple[Seed, int, int]] = []
+    for seed in seeds:
+        have = int(drawn.get(seed.seed_id, 0))
+        if matched:
+            spent = batches_per_seed.get(seed.seed_id)
+            if spent is None:
+                continue
+            want = max(1, int(spent))
+        else:
+            want = 1
+        if want > have:
+            todo.append((seed, have, want - have))
+
+    skipped = len(seeds) - len(todo)
+    if skipped:
         logger.info(
-            "Baseline: skipping %d seed(s) that already have rows in baseline.jsonl",
-            len(seeds) - len(pending),
+            "Baseline: %d seed(s) need no batch (already matched, or never reached "
+            "by the loop); generating for %d.", skipped, len(todo),
         )
 
-    for seed in tqdm(pending, desc="baseline", unit="seed"):
-        n_batches = 1
-        if matched:
-            n_batches = max(1, int(batches_per_seed.get(seed.seed_id, 1)))
+    for seed, have, missing in tqdm(todo, desc="baseline", unit="seed"):
+        n_batches = have + missing
 
-        for batch_idx in range(n_batches):
+        for batch_idx in range(have, n_batches):
             ts_start = datetime.now(timezone.utc)
 
             # Preserve the historical image layout (images/<seed>/baseline/) when
@@ -138,5 +159,5 @@ async def run_baseline(
 
     logger.info(
         "Baseline complete (%s) — %d seeds, %d T2I calls",
-        cfg.baseline_mode, len(seeds), t_calls,
+        cfg.baseline_mode, len(todo), t_calls,
     )

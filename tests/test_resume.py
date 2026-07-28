@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ouroboros.baseline import completed_baseline_seeds
+from ouroboros.baseline import baseline_batches_per_seed
 from ouroboros.config import RunConfig, config_hash
 from ouroboros.loop import _batches_from_run_jsonl
 from ouroboros.storage import record_resume, write_meta
@@ -56,17 +56,19 @@ class TestBatchesFromRunJsonl:
         assert _batches_from_run_jsonl(tmp_path, {"a", "b"}) == {"a": 1}
 
 
-class TestCompletedBaselineSeeds:
-    def test_collects_seed_ids_across_multiple_batches(self, tmp_path):
+class TestBaselineBatchesPerSeed:
+    def test_counts_batches_not_seeds(self, tmp_path):
+        # Counts, not a set: a seed with 1 of 3 owed batches must be topped up,
+        # and a done/not-done flag cannot express that.
         _write_jsonl(tmp_path / "baseline.jsonl", [
             {"seed_id": "a", "iter": 0},
             {"seed_id": "a", "iter": 1},
             {"seed_id": "b", "iter": 0},
         ])
-        assert completed_baseline_seeds(tmp_path) == {"a", "b"}
+        assert baseline_batches_per_seed(tmp_path) == {"a": 2, "b": 1}
 
     def test_missing_file_means_nothing_done(self, tmp_path):
-        assert completed_baseline_seeds(tmp_path) == set()
+        assert baseline_batches_per_seed(tmp_path) == {}
 
 
 class TestRecordResume:

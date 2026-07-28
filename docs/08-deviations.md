@@ -465,7 +465,13 @@ Riprendere un run interrotto (o fermato dal tetto `--max-t2i-calls`, che è il c
 
 **Semantica del tetto sul resume**: `global_calls` riparte da zero, quindi `--max-t2i-calls` su una ripresa è un budget *per quella sessione*, non un totale cumulativo. È il comportamento utile quando si estende un run a tranche, ma va saputo — il loop ora lo dichiara nel log all'avvio.
 
-Test: `tests/test_resume.py`.
+Un test di integrazione end-to-end (`tests/test_resume_integration.py`, che pilota `cli._async_run` con i tre modelli sostituiti da fake) ha poi fatto emergere un **difetto preesistente** che si sommava male al fix: `run_baseline` cicla su tutti i seed, quindi quando il tetto ferma il loop a metà genera un comparatore anche per i seed che il loop **non ha mai raggiunto** — immagini spese su righe che non si possono appaiare a nulla. Su un run fermato a 133 seed su 175 sono ~42 baseline orfane, ~340 immagini.
+
+E la combinazione era peggiore della somma: la prima versione del fix saltava i seed già presenti in `baseline.jsonl`, quindi al resume quei 42 seed — che nel frattempo ricevono il loro lato iterativo — si sarebbero tenuti il comparatore da **un solo batch**, congelando l'asimmetria invece di correggerla.
+
+**Fix definitivo**: `run_baseline` accetta `already_drawn` (seed → batch già presenti) e genera i **batch mancanti** invece di ragionare per seed fatti/non fatti. Un seed assente da `batches_per_seed` viene saltato del tutto (il loop non l'ha raggiunto, non c'è nulla da rispecchiare); un seed con un comparatore parziale viene completato; uno già appaiato viene lasciato stare. Le immagini nuove usano indici `baseline_<k>` che ripartono da quelli esistenti, quindi non sovrascrivono nulla.
+
+Test: `tests/test_resume.py` (unitari) e `tests/test_resume_integration.py` (flusso completo: run con tetto → resume → verifica di directory unica, righe preservate, budget-matching ricostruito, nessuna baseline orfana, comparatori parziali completati, immagini precedenti intatte).
 
 ### A.24 Soglia di leggibilità sull'ABS ✦ FIX (v3.1)
 
