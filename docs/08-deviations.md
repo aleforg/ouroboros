@@ -453,6 +453,20 @@ Due tentativi scartati prima del fix definitivo:
 
 **Lezione trasferibile**: il selftest del judge va eseguito con **lo stesso numero di immagini** che usa il loop (`chunk_size = 4`, non le 2 di una prova rapida), altrimenti riproduce una condizione più facile e dà un falso verde.
 
+### A.23 `--resume` estendeva un run forkandolo ✦ FIX (v3.1)
+
+Riprendere un run interrotto (o fermato dal tetto `--max-t2i-calls`, che è il caso normale quando si lavora a budget GPU limitato) produceva silenziosamente un confronto appaiato rotto. Tre difetti concorrenti:
+
+1. **La cartella veniva ricreata.** `_run_id_from_cfg` include un timestamp, quindi ogni lancio apriva una directory nuova anche a configurazione identica; `cli.py` non passava mai il parametro `run_id` che `make_run_dir` già accettava. Il resume leggeva il checkpoint dalla cartella vecchia e scriveva nella nuova, spezzando righe, immagini e baseline di un unico run su due directory — mentre ogni lettore, da `ouroboros report` alla dashboard, ne assume una.
+2. **La baseline perdeva il budget-matching.** `batches_per_seed` viene popolato solo per i seed processati nella sessione corrente; quelli già completati venivano saltati e `run_baseline` cadeva sul fallback `.get(seed_id, 1)`, cioè **un solo batch** invece di quelli realmente spesi. Il comparatore diventava asimmetrico proprio nel modo che la modalità `matched` esiste per impedire.
+3. **La baseline veniva rigenerata per tutti.** `run_baseline` cicla su `seeds`, non sui soli pendenti: i seed già coperti ricevevano un secondo comparatore, sprecando immagini (su un run da 175 seed, ~1100) e duplicando righe.
+
+**Fix**: il nuovo helper `cli._open_run_dir` è l'unico punto che risolve la directory, condiviso da percorso reale e `--dry-run` così non possono divergere; con `--resume` riusa la cartella originale e aborta se non c'è `checkpoint.json`. `storage.record_resume` **appende** la sessione a `meta.json` invece di sovrascriverlo, perché le righe già su disco sono state prodotte sotto la configurazione precedente e un'estensione ha per definizione un `max_t2i_calls` diverso. `loop._batches_from_run_jsonl` ricostruisce i conteggi dei seed completati leggendo `run.jsonl` (conta i record con `samples`, che è dove `run_one_seed` incrementa `gen_batches`), e `baseline.completed_baseline_seeds` fa saltare i seed che hanno già righe in `baseline.jsonl`.
+
+**Semantica del tetto sul resume**: `global_calls` riparte da zero, quindi `--max-t2i-calls` su una ripresa è un budget *per quella sessione*, non un totale cumulativo. È il comportamento utile quando si estende un run a tranche, ma va saputo — il loop ora lo dichiara nel log all'avvio.
+
+Test: `tests/test_resume.py`.
+
 ---
 
 ## B. Differenze rispetto al design contract v1

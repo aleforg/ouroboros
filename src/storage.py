@@ -81,6 +81,29 @@ def write_meta(
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
+def record_resume(run_dir: Path, cfg: RunConfig, resumed_at: str) -> None:
+    """Append a resume record to meta.json instead of overwriting it.
+
+    A resume legitimately carries a different config from the session that
+    produced the earlier rows — extending a capped run means raising
+    ``max_t2i_calls``, which is the whole point. Rewriting meta.json would erase
+    the configuration those rows were actually generated under.
+    """
+    meta_path = run_dir / "meta.json"
+    if not meta_path.exists():
+        return
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta.setdefault("resumes", []).append(
+        {
+            "resumed_at": resumed_at,
+            "config": asdict(cfg),
+            "config_hash": config_hash(cfg),
+        }
+    )
+    meta["ended_at"] = None
+    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+
 def update_meta_ended(run_dir: Path, ended_at: str) -> None:
     meta_path = run_dir / "meta.json"
     if not meta_path.exists():

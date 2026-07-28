@@ -281,15 +281,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
         logger.info("  seed %-20s  [%s]  %s", s.seed_id, s.category, s.base_scene)
 
     if args.dry_run:
-        run_dir, run_id = make_run_dir(cfg.output_dir, cfg)
         started_at = datetime.now(timezone.utc).isoformat()
-        write_meta(
-            run_dir, run_id, cfg,
-            attacker_model=cfg.attacker_model,
-            judge_model=cfg.judge_model,
-            judge_backend=cfg.judge_backend,
-            started_at=started_at,
-        )
+        run_dir, _ = _open_run_dir(cfg, getattr(args, "resume", None), started_at)
         logger.info("Dry-run complete. Run dir: %s", run_dir)
         return
 
@@ -305,15 +298,9 @@ async def _async_run(cfg: RunConfig, seeds: list, args: argparse.Namespace) -> N
     from ouroboros.loop import run_pair_loop
     from ouroboros.baseline import run_baseline
 
-    run_dir, run_id = make_run_dir(cfg.output_dir, cfg)
     started_at = datetime.now(timezone.utc).isoformat()
-    write_meta(
-        run_dir, run_id, cfg,
-        attacker_model=cfg.attacker_model,
-        judge_model=cfg.judge_model,
-        judge_backend=cfg.judge_backend,
-        started_at=started_at,
-    )
+    resume_id = getattr(args, "resume", None)
+    run_dir, run_id = _open_run_dir(cfg, resume_id, started_at)
     logger.info("Run dir: %s", run_dir)
 
     target = build_target(
@@ -345,9 +332,9 @@ async def _async_run(cfg: RunConfig, seeds: list, args: argparse.Namespace) -> N
     run_writer = JSONLWriter(run_dir / "run.jsonl")
 
     resume_seed_ids: set[str] | None = None
-    if args.resume:
+    if resume_id:
         from ouroboros.storage import load_checkpoint
-        ckpt = load_checkpoint(Path(cfg.output_dir) / args.resume)
+        ckpt = load_checkpoint(run_dir)
         if ckpt:
             resume_seed_ids = set(ckpt.get("completed_seed_ids", []))
             logger.info("Resuming from checkpoint — %d seeds already done", len(resume_seed_ids))
@@ -367,14 +354,52 @@ async def _async_run(cfg: RunConfig, seeds: list, args: argparse.Namespace) -> N
     if cfg.run_baseline and cfg.baseline_mode == "matched":
         logger.info("─── baseline (budget-matched) ───")
         baseline_writer = JSONLWriter(run_dir / "baseline.jsonl")
+        from ouroboros.baseline import completed_baseline_seeds
+
         await run_baseline(
             seeds, cfg, target, judge, baseline_writer, run_dir,
             batches_per_seed=batches_per_seed,
+            skip_seed_ids=completed_baseline_seeds(run_dir),
         )
 
     ended_at = datetime.now(timezone.utc).isoformat()
     update_meta_ended(run_dir, ended_at)
     logger.info("═══ run complete  run_id=%s ═══", run_id)
+
+
+def _open_run_dir(
+    cfg: RunConfig, resume_id: str | None, started_at: str
+) -> tuple[Path, str]:
+    """Resolve the run directory and record this session in meta.json.
+
+    A resume reuses the ORIGINAL directory. ``run_id`` carries a timestamp, so
+    letting ``make_run_dir`` mint a fresh one would scatter a single run's rows,
+    images and baseline across two directories — and every reader, from
+    ``ouroboros report`` to the dashboard, works on one directory. The original
+    meta.json is kept and the resuming session appended to it, because the rows
+    already on disk were produced under the earlier config (extending a capped
+    run means raising ``max_t2i_calls``, so the two genuinely differ).
+    """
+    from ouroboros.storage import record_resume
+
+    if resume_id:
+        run_dir = Path(cfg.output_dir) / resume_id
+        if not (run_dir / "checkpoint.json").exists():
+            logger.error("--resume %s: no checkpoint.json under %s", resume_id, run_dir)
+            sys.exit(1)
+        record_resume(run_dir, cfg, started_at)
+        logger.info("Resuming into %s", run_dir)
+        return run_dir, resume_id
+
+    run_dir, run_id = make_run_dir(cfg.output_dir, cfg)
+    write_meta(
+        run_dir, run_id, cfg,
+        attacker_model=cfg.attacker_model,
+        judge_model=cfg.judge_model,
+        judge_backend=cfg.judge_backend,
+        started_at=started_at,
+    )
+    return run_dir, run_id
 
 
 def _cmd_report(args: argparse.Namespace) -> None:

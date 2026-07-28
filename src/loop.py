@@ -348,6 +348,35 @@ def _write_live(run_dir: Path, payload: dict) -> None:
 # --- outer driver -------------------------------------------------------------
 
 
+def _batches_from_run_jsonl(run_dir: Path, seed_ids: set[str]) -> dict[str, int]:
+    """Recover per-seed generative batch counts from an existing run.jsonl.
+
+    On resume the already-completed seeds never enter this session's loop, so
+    their realized draw counts would be missing from ``batches_per_seed`` and
+    the matched baseline would quietly fall back to one batch each — an
+    asymmetric comparator, which is precisely what matched mode exists to
+    prevent. A record counts as a generative batch iff it carries samples,
+    mirroring where ``run_one_seed`` increments ``gen_batches``.
+    """
+    path = run_dir / "run.jsonl"
+    counts: dict[str, int] = {}
+    if not path.exists():
+        return counts
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            seed_id = rec.get("seed_id")
+            if seed_id in seed_ids and rec.get("samples"):
+                counts[seed_id] = counts.get(seed_id, 0) + 1
+    return counts
+
+
 async def run_pair_loop(
     seeds: list[Seed],
     cfg: RunConfig,
@@ -367,6 +396,15 @@ async def run_pair_loop(
     completed_seed_ids: list[str] = list(resume_from or [])
     global_calls = 0
     batches_per_seed: dict[str, int] = {}
+    if resume_from:
+        batches_per_seed.update(_batches_from_run_jsonl(run_dir, resume_from))
+        logger.info(
+            "Resume: recovered draw counts for %d/%d completed seeds from run.jsonl "
+            "(the matched baseline needs them). The T2I cap applies to this "
+            "session only — %d images already spent are not counted against it.",
+            len(batches_per_seed), len(resume_from),
+            sum(batches_per_seed.values()) * cfg.budget.m,
+        )
     ram_monitor = RamMonitor(run_dir)
 
     pending = [s for s in seeds if s.seed_id not in (resume_from or set())]

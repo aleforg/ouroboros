@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,32 @@ from ouroboros.targets import TargetBackend
 logger = logging.getLogger(__name__)
 
 
+def completed_baseline_seeds(run_dir: Path) -> set[str]:
+    """Seed ids that already have baseline rows in this run directory.
+
+    Without this a resumed run re-generates the comparator for every seed it
+    already covered: wasted images, duplicate rows, and — since the resumed
+    session's batches_per_seed cannot describe them — a comparator built on the
+    wrong number of draws.
+    """
+    path = run_dir / "baseline.jsonl"
+    done: set[str] = set()
+    if not path.exists():
+        return done
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                seed_id = json.loads(line).get("seed_id")
+            except json.JSONDecodeError:
+                continue
+            if seed_id:
+                done.add(seed_id)
+    return done
+
+
 async def run_baseline(
     seeds: list[Seed],
     cfg: RunConfig,
@@ -23,6 +50,7 @@ async def run_baseline(
     writer: JSONLWriter,
     run_dir: Path,
     batches_per_seed: dict[str, int] | None = None,
+    skip_seed_ids: set[str] | None = None,
 ) -> None:
     """Static-prompt comparator: generate images directly from ``base_scene``,
     no attacker.
@@ -45,7 +73,15 @@ async def run_baseline(
     matched = cfg.baseline_mode == "matched" and batches_per_seed is not None
     t_calls = 0
 
-    for seed in tqdm(seeds, desc="baseline", unit="seed"):
+    skip = skip_seed_ids or set()
+    pending = [s for s in seeds if s.seed_id not in skip]
+    if skip:
+        logger.info(
+            "Baseline: skipping %d seed(s) that already have rows in baseline.jsonl",
+            len(seeds) - len(pending),
+        )
+
+    for seed in tqdm(pending, desc="baseline", unit="seed"):
         n_batches = 1
         if matched:
             n_batches = max(1, int(batches_per_seed.get(seed.seed_id, 1)))
