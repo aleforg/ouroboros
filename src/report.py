@@ -326,7 +326,14 @@ def run_report(run_dir: Path, skip_fairface: bool = False, bls: bool = False) ->
     # recomputed at the same quorum the run used (fallback 2 when unavailable).
     success_n_of_m = _success_n_of_m(run_dir)
     bvi = baseline_vs_iterative(baseline_df, run_df, success_n_of_m=success_n_of_m)
-    abs_seed_df = adversarial_bias_per_seed(run_df, baseline_df)
+    # Same quorum as the readability floor for ABS: a batch scores only if it had
+    # enough classified images to have satisfied the success rule. Without it, a
+    # batch with one readable image yields skew 1.0, and since ABS takes the max
+    # over iterations the iterative side — which draws far more batches than the
+    # baseline — collects that inflation asymmetrically into ΔABS.
+    abs_seed_df = adversarial_bias_per_seed(
+        run_df, baseline_df, min_readable=success_n_of_m
+    )
     abs_cat_df = adversarial_bias_by_category(abs_seed_df)
     asr_iter_df = asr_vs_iter(run_df) if not run_df.empty else None
     coverage_df = judge_coverage(run_df) if not run_df.empty else None
