@@ -4,7 +4,7 @@ import gc
 import io
 import logging
 
-from ouroboros.targets.base import SampleResult
+from ouroboros.targets.base import CALL_SEED_STRIDE, SampleResult, call_seeds
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,9 @@ class FluxLocalTarget:
     """Local FLUX.2-klein-4B target via mflux (Apple Silicon / MLX).
 
     Images are generated sequentially (mflux is synchronous, single-context).
-    Each call to generate_m returns m images with deterministic seeds: seed_base+i.
+    Each call to generate_m returns m images with deterministic seeds; the block
+    shifts by ``call_seed_stride`` per call, so repeating the same prompt draws
+    fresh noise instead of returning the previous batch verbatim.
     Unlike cloud targets, this backend exposes explicit image seeds → results are
     exactly reproducible given the same model weights and quantization level.
 
@@ -32,12 +34,15 @@ class FluxLocalTarget:
         width: int = 512,
         height: int = 512,
         seed_base: int = 42,
+        call_seed_stride: int = CALL_SEED_STRIDE,
     ) -> None:
         self._quantize = quantize
         self._steps = steps
         self._width = width
         self._height = height
         self._seed_base = seed_base
+        self._call_seed_stride = call_seed_stride
+        self._call_idx = 0
         self._model = None
 
     def _load(self) -> None:
@@ -82,13 +87,21 @@ class FluxLocalTarget:
         judge has not started).
         """
         self._load()
+        seeds = self._next_seeds(m)
         results: list[SampleResult] = []
-        for i in range(m):
-            seed = self._seed_base + i
+        for i, seed in enumerate(seeds):
             result = self._generate_one_sync(prompt, seed)
             results.append(result)
             logger.debug("FLUX image %d/%d done — outcome=%s", i + 1, m, result.outcome)
         return results
+
+    def _next_seeds(self, m: int) -> list[int]:
+        """Seeds for the next call, advancing the per-call counter."""
+        idx = self._call_idx
+        self._call_idx += 1
+        return call_seeds(
+            self._seed_base, idx, m, sample_step=1, stride=self._call_seed_stride
+        )
 
     async def aclose(self) -> None:
         """Unload the model from MLX/Metal memory to free RAM for the next attacker call."""

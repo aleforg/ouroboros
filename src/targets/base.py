@@ -21,6 +21,37 @@ class SampleResult:
     error: str | None = None
 
 
+# Distance between the noise-seed blocks of two consecutive generate_m calls.
+# Large enough that a block can never reach into the next one: the per-sample
+# step is at most 1000 and M is a handful.
+CALL_SEED_STRIDE = 1_000_000
+
+
+def call_seeds(
+    seed_base: int,
+    call_idx: int,
+    m: int,
+    *,
+    sample_step: int = 1000,
+    stride: int = CALL_SEED_STRIDE,
+) -> list[int]:
+    """Noise seeds for one ``generate_m`` call.
+
+    Seeding only by position inside the batch (``seed_base + i * sample_step``)
+    makes two calls with the same prompt return bit-identical images. That is
+    invisible in the iterative loop, whose prompt changes every iteration, but it
+    silently voids the budget-matched comparator in ``baseline.py``, which calls
+    ``generate_m`` repeatedly with the *same* neutral prompt: every extra batch is
+    a copy, so the max-over-batches selection can climb on the attacker's side and
+    not on the control's. Including ``call_idx`` gives each call its own disjoint
+    block of seeds.
+
+    ``stride=0`` restores the legacy behaviour exactly — needed to byte-replay
+    runs generated before this fix, and nothing else.
+    """
+    return [seed_base + call_idx * stride + i * sample_step for i in range(m)]
+
+
 class RateLimiter:
     """Simple token-bucket rate limiter for async use."""
 
@@ -65,6 +96,7 @@ def build_target(
     target_width: int = 512,
     target_height: int = 512,
     target_seed_base: int = 42,
+    target_call_seed_stride: int = CALL_SEED_STRIDE,
 ) -> TargetBackend:
     """Factory for target backends.
 
@@ -79,6 +111,11 @@ def build_target(
     The sampling params are not interchangeable across backends — see
     ``config.TARGET_DEFAULTS`` / ``config.resolve_target_params``, which is
     what callers should use to fill them in.
+
+    ``target_call_seed_stride=0`` reverts to seeding by position inside the batch
+    only, which makes repeated calls with the same prompt return identical images.
+    It exists for one purpose: byte-replaying runs generated before that was
+    fixed. Do not use it for a new run.
     """
     if backend == "flux":
         from ouroboros.targets.flux import FluxLocalTarget
@@ -89,6 +126,7 @@ def build_target(
             width=target_width,
             height=target_height,
             seed_base=target_seed_base,
+            call_seed_stride=target_call_seed_stride,
         )
     if backend == "diffusers":
         from ouroboros.targets.diffusers_flux import FluxDiffusersTarget
@@ -99,6 +137,7 @@ def build_target(
             height=target_height,
             quantize_bits=target_quantize,
             seed_base=target_seed_base,
+            call_seed_stride=target_call_seed_stride,
         )
     if backend == "qwen-image":
         from ouroboros.targets.qwen_image import QwenImageTarget
@@ -109,6 +148,7 @@ def build_target(
             height=target_height,
             quantize_bits=target_quantize,
             seed_base=target_seed_base,
+            call_seed_stride=target_call_seed_stride,
         )
     raise ValueError(
         f"Unknown target backend {backend!r}. Supported: "

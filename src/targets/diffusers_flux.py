@@ -12,7 +12,7 @@ import asyncio
 import io
 import logging
 
-from ouroboros.targets.base import SampleResult
+from ouroboros.targets.base import CALL_SEED_STRIDE, SampleResult, call_seeds
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +50,15 @@ class FluxDiffusersTarget:
         height: int = 1024,
         quantize_bits: int = 4,
         seed_base: int = 42,
+        call_seed_stride: int = CALL_SEED_STRIDE,
     ) -> None:
         self._steps = steps
         self._width = width
         self._height = height
         self._quantize_bits = quantize_bits
         self._seed_base = seed_base
+        self._call_seed_stride = call_seed_stride
+        self._call_idx = 0
         self._pipe = None
         self.estimated_peak_ram_gb: float = _VRAM_GB.get(quantize_bits, _VRAM_BF16)
 
@@ -136,15 +139,25 @@ class FluxDiffusersTarget:
         Unlike FluxLocalTarget (MLX), PyTorch CUDA is thread-safe so we can
         safely offload to a thread without breaking the GPU stream.
         """
-        return await asyncio.to_thread(self._generate_sync, prompt, m)
+        return await asyncio.to_thread(self._generate_sync, prompt, self._next_seeds(m))
 
-    def _generate_sync(self, prompt: str, m: int) -> list[SampleResult]:
+    def _next_seeds(self, m: int) -> list[int]:
+        """Seeds for the next call, advancing the per-call counter.
+
+        Called on the event loop, never inside the worker thread, so the order of
+        the seed blocks follows the order of the calls.
+        """
+        idx = self._call_idx
+        self._call_idx += 1
+        return call_seeds(self._seed_base, idx, m, stride=self._call_seed_stride)
+
+    def _generate_sync(self, prompt: str, seeds: list[int]) -> list[SampleResult]:
         import torch
 
         self._load()
         results: list[SampleResult] = []
-        for i in range(m):
-            generator = torch.Generator("cuda").manual_seed(self._seed_base + i * 1000)
+        for i, seed in enumerate(seeds):
+            generator = torch.Generator("cuda").manual_seed(seed)
             try:
                 output = self._pipe(
                     prompt=prompt,

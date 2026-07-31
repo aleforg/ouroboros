@@ -489,6 +489,24 @@ Emerso analizzando `sb-prof-049` sul run Qwen-Image: l'iterazione 0 aveva `[· �
 
 Test: `tests/test_metrics_adversarial.py::TestReadabilityFloor`.
 
+### A.25 Il seme del target non variava fra chiamate ✦ FIX (v3.2)
+
+Tutti e tre i backend seminavano il campionatore **solo** in base alla posizione dell'immagine dentro il batch: `seed_base + i` (mflux) e `seed_base + i * 1000` (i due diffusers). Nulla dipendeva dalla chiamata, quindi due invocazioni di `generate_m()` con lo stesso prompt restituivano immagini **bit-identiche**.
+
+Sul lato iterativo è invisibile — il prompt cambia a ogni iterazione — ma `baseline.py` in modalità `matched` chiama `generate_m(seed.base_scene, M)` ripetutamente con lo **stesso** prompt neutro: ogni batch di controllo successivo al primo era una copia esatta.
+
+**Misurato sui due run completi**: 28 seed su 28 con più di un batch di controllo avevano batch bit-identici, su entrambi i modelli. 496 immagini duplicate su 1896 nel run FLUX (26,2%) e 392 su 1504 nel run Qwen (26,1%).
+
+**Conseguenza sulla metrica**: `adversarial_bias_per_seed` prende, per seed, il batch a **skew massimo** su entrambi i lati. Su K estrazioni diverse quel massimo sale; su K copie identiche non si muove. Il guadagno misurato del massimo è +0,613 (FLUX) e +0,361 (Qwen) sul lato avversariale contro **esattamente +0,000** sul lato di controllo. Il ΔABS pubblicato per FLUX, +0,057 [+0,002; +0,116] sui seed condivisi, **cambia segno** a −0,038 [−0,101; +0,024] appaiando i due lati sulle estrazioni indipendenti.
+
+**Fix**: `targets/base.py` espone `CALL_SEED_STRIDE = 1_000_000` e la funzione pura `call_seeds(seed_base, call_idx, m, sample_step, stride)`; ogni backend tiene un `_call_idx` di istanza e ricava i semi da `_next_seeds(m)`, che lo avanza. I due backend CUDA calcolano i semi sull'event loop e li passano a `_generate_sync`, così l'ordine dei blocchi segue l'ordine delle chiamate anche con `asyncio.to_thread`. La spaziatura per campione resta quella di prima su ogni backend (1 su mflux, 1000 sui diffusers), quindi **la prima chiamata di un target appena costruito produce esattamente i semi di prima**.
+
+**Compatibilità con `--replay`**: la retrocompatibilità vale solo per la prima chiamata, e un replay ne fa una per record. `build_target(..., target_call_seed_stride=0)` ripristina il comportamento legacy, ed è quello che `replay.py` passa oggi: tutti i run attualmente su disco sono stati generati con lo schema vecchio. Va rimesso al default per replayare run prodotti **dopo** questo fix — il commento nel codice lo dice, e il match-rate in `replay_summary.json` è il segnale che serve.
+
+**Conseguenza sui risultati già prodotti**: le estrazioni di controllo indipendenti mancanti **non sono recuperabili** — quelle immagini non sono mai state generate. È recuperabile il *confronto*: `src/metrics/dedup.py` appaia i due lati sul numero di estrazioni indipendenti (firma SHA256 distinta) invece che sul numero di batch, e `scripts/recompute_corrected.py` riscrive `<run_dir>/report_corrected/` senza rigenerare nulla. Con i run attuali il budget appaiato è k = 1 per ogni seed, quindi il confronto corretto risponde a «un prompt avversariale batte un prompt neutro?» e **non** a «la ricerca iterativa batte il controllo?», che con questi dati non è rispondibile. La correzione è auto-annullante: quando i batch ripetuti saranno davvero indipendenti, k torna a coincidere col budget realizzato e la funzione riproduce il disegno budget-matched originale.
+
+Test: `tests/test_target_call_seeding.py` (20 casi, nessun modello caricato — `_next_seeds` è puro) e `tests/test_metrics_dedup.py`.
+
 ---
 
 ## B. Differenze rispetto al design contract v1

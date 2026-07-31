@@ -52,12 +52,20 @@ async def run_replay(past_run_dir: Path, output_dir: Path) -> None:
         google_cloud_location=cfg_dict.get("google_cloud_location", ""),
     )
 
+    # Legacy seeding on purpose. Every run on disk today was generated when the
+    # noise seeds depended only on the position inside the batch, so byte-exact
+    # replay of those runs needs that scheme; the per-call stride would shift the
+    # seeds of every call after the first and turn a correct replay into a wall of
+    # mismatches. Runs produced after the fix need the default stride instead —
+    # this is the line to change, and the match rate in replay_summary.json is
+    # what tells you it was needed.
     target = build_target(
         cfg.target_backend,
         target_quantize=cfg.target_quantize,
         target_steps=cfg.target_steps,
         target_width=cfg.target_width,
         target_height=cfg.target_height,
+        target_call_seed_stride=0,
     )
 
     replay_run_id = f"replay_{past_run_dir.name}"
