@@ -87,17 +87,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default=TARGET_BACKEND_DEFAULT, dest="target_backend",
         help="flux: FLUX.2-klein-4B via mflux (Apple Silicon, default) | "
              "diffusers: FLUX.2-klein-4B via HuggingFace diffusers (NVIDIA CUDA, RunPod) | "
-             "qwen-image: Qwen-Image 20B via diffusers (NVIDIA CUDA, ~18 GB VRAM at 4-bit)",
+             "qwen-image: Qwen-Image-2.1 via diffusers (NVIDIA CUDA)",
     )
     # The --flux-* spellings are kept as aliases: these knobs predate the second
     # model family. Defaults are None and resolved per backend afterwards, since
-    # klein (4 steps / 512 px) and Qwen-Image (50 steps / 1024 px) disagree.
+    # klein (4 steps / 512 px) and Qwen-Image-2.1 (40 steps / 1024 px) disagree.
     run_p.add_argument("--target-quantize", "--flux-quantize", type=int,
                        choices=[3, 4, 5, 6, 8, 16], default=None,
                        dest="target_quantize", metavar="BITS")
     run_p.add_argument("--target-steps", "--flux-steps", type=int, default=None,
                        dest="target_steps",
-                       help="Inference steps (default: 4 for klein distilled, 50 for qwen-image)")
+                       help="Inference steps (default: 4 for klein distilled, 40 for qwen-image)")
     run_p.add_argument("--target-size", "--flux-size", type=int, default=None,
                        dest="target_size", metavar="PX",
                        help="Image size in pixels, applied to both width and height "
@@ -251,13 +251,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
             cfg.target_backend,
         )
 
-    # Aggressive unload drops the target after every batch (loop.py). For a 20B
-    # model that means re-quantizing on every iteration — minutes of overhead per
-    # batch. Qwen-Image already keeps its weights in system RAM via
-    # enable_model_cpu_offload(), so idle VRAM pressure is low without unloading.
+    # Aggressive unload drops the target after every batch (loop.py), paying
+    # loading/quantization again. Qwen can offload weights on smaller GPUs,
+    # but resident mode still needs room for the attacker and judge.
     if cfg.target_backend == "qwen-image" and cfg.aggressive_unload:
         logger.warning(
-            "target_backend=qwen-image with aggressive unload: the 20B pipeline is "
+            "target_backend=qwen-image with aggressive unload: the Qwen-Image-2.1 pipeline is "
             "re-quantized on every iteration. Pass --no-aggressive-unload unless "
             "you are deliberately trading time for VRAM."
         )

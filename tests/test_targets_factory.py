@@ -65,10 +65,10 @@ class TestParamPropagation:
         assert t._seed_base == 7
 
     def test_qwen_vram_estimate_tracks_quantization(self):
-        assert build_target("qwen-image", target_quantize=4).estimated_peak_ram_gb == 18.0
-        assert build_target("qwen-image", target_quantize=8).estimated_peak_ram_gb == 30.0
-        # Anything else means full bfloat16 — an 80 GB card.
-        assert build_target("qwen-image", target_quantize=16).estimated_peak_ram_gb == 60.0
+        assert build_target("qwen-image", target_quantize=4).estimated_peak_ram_gb == 12.0
+        assert build_target("qwen-image", target_quantize=8).estimated_peak_ram_gb == 20.0
+        # Conservative loading estimate, not a measured 1024px peak.
+        assert build_target("qwen-image", target_quantize=16).estimated_peak_ram_gb == 36.0
 
 
 class TestResolveTargetParams:
@@ -77,7 +77,7 @@ class TestResolveTargetParams:
         assert resolve_target_params("diffusers") == (4, 512, 4)
 
     def test_qwen_needs_more_steps_and_resolution(self):
-        assert resolve_target_params("qwen-image") == (50, 1024, 4)
+        assert resolve_target_params("qwen-image") == (40, 1024, 4)
 
     def test_explicit_values_win(self):
         assert resolve_target_params("qwen-image", steps=8, size=512, quantize=8) == (8, 512, 8)

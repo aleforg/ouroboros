@@ -13,10 +13,12 @@ Adatta l'approccio PAIR (Chao et al., 2023) dal jailbreak testuale alla fairness
 ## Modelli e default
 
 - **Attacker**: `dolphin-llama3:latest` via Ollama (~5 GB, 8B 4-bit).
-- **Target** (default `--target-backend flux`): FLUX.2-klein-4B locale via mflux (~5 GB, Apple Silicon). Due alternative su GPU cloud NVIDIA, entrambe con l'extra `[diffusers]`: `--target-backend diffusers` (lo stesso FLUX.2-klein-4B via HuggingFace diffusers) e `--target-backend qwen-image` (Qwen-Image 20B, ~18 GB VRAM a 4-bit — secondo modello, serve a distinguere un bias del modello da un bias della famiglia FLUX).
+- **Target** (default `--target-backend flux`): FLUX.2-klein-4B locale via mflux (~5 GB, Apple Silicon). Due alternative su GPU cloud NVIDIA, entrambe con l'extra `[diffusers]`: `--target-backend diffusers` (lo stesso FLUX.2-klein-4B via HuggingFace diffusers) e `--target-backend qwen-image` ([Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1), secondo modello per distinguere un bias del modello da un bias della famiglia FLUX).
 - **Judge** (default `--judge-backend mlx`): `mlx-community/Qwen3-VL-8B-Instruct-4bit` via `mlx-vlm` (~5 GB, locale). In alternativa `--judge-backend ollama`: `qwen3-vl:8b`. **Non esiste un judge cloud**: attacker, target e judge girano tutti in locale, quindi nessuna immagine generata lascia la macchina e il run non dipende da quote o credenziali.
 
-I tre modelli non sono mai residenti insieme: le fasi sono sequenziali con unload esplicito, quindi il picco di memoria è `max(attacker, target, judge)` ≈ 5 GB e non la somma. Vedi `docs/02-architecture.md`.
+Il backend CLI resta `qwen-image`, ma carica `Qwen/Qwen-Image-2.1` con `QwenImage21Pipeline`: visual transformer **7B** + text encoder **Qwen3-VL 8B**. Default: **40 step / 1024 px / 4-bit**, senza CFG (`true_cfg_scale=1.0`, nessun negative prompt). Stime VRAM conservative **non misurate**: **12 GB a 4-bit, 20 GB a 8-bit, 36 GB in bf16**, più headroom per le attivazioni; non garantiscono il fit a 1024 px, soprattutto con Ollama residente. Licenza **Qwen Research**, non Apache: consultare la model card ufficiale prima dell'uso.
+
+Con i default Mac (target FLUX e unload aggressivo) i tre modelli non sono mai residenti insieme: le fasi sono sequenziali con unload esplicito, quindi il picco di memoria è `max(attacker, target, judge)` ≈ 5 GB e non la somma. Il target Qwen richiede il budget GPU indicato sopra; con `--no-aggressive-unload` occorre considerare anche gli altri modelli residenti. Vedi `docs/02-architecture.md`.
 
 ## Installazione
 
@@ -32,9 +34,11 @@ Extra disponibili:
 |---|---|---|
 | `fairface` | `pip install -e ".[fairface]"` | pipeline demografica post-hoc dentro `ouroboros report` |
 | `web` | `pip install -e ".[web]"` | dashboard Streamlit (≥ 1.37) |
-| `diffusers` | `pip install -e ".[diffusers]"` | target su NVIDIA CUDA: `--target-backend diffusers` (FLUX.2-klein) e `--target-backend qwen-image` (Qwen-Image 20B) |
+| `diffusers` | `pip install -e ".[diffusers]"` | target su NVIDIA CUDA: `--target-backend diffusers` (FLUX.2-klein) e `--target-backend qwen-image` (Qwen-Image-2.1) |
 | `seeds` | `pip install -e ".[seeds]"` | rigenerare `data/stable_bias_prompts.jsonl` dalla sorgente HuggingFace |
 | `dev` | `pip install -e ".[dev]"` | pytest |
+
+Per Qwen-Image-2.1 servono **diffusers da git main** (la model card non garantisce una release compatibile), **transformers ≥5.17**, **torch ≥2.5**, **accelerate ≥1.1.0** e **bitsandbytes ≥0.46.1** per la quantizzazione. La model card indica torch ≥2.4, ma il [controllo runtime di transformers 5.17](https://raw.githubusercontent.com/huggingface/transformers/v5.17.0/src/transformers/utils/import_utils.py) disabilita Torch sotto 2.5: i requisiti effettivi sono quindi più alti. L'extra `[diffusers]` include questi requisiti e fissa diffusers alla revisione upstream verificata `578c9b2c6636ab2424a0e56186268b83623656b2`, invece di seguire un `main` mobile. È sufficiente `pip install -e ".[diffusers]"` con **Git installato**.
 
 Scaricare manualmente i pesi `res34_fair_align_multi_7_20190809.pt` da [joojs/fairface](https://github.com/joojs/fairface) in `~/.cache/ouroboros/fairface/` (oppure puntare con `OUROBOROS_FAIRFACE_WEIGHTS`).
 
@@ -60,10 +64,12 @@ ouroboros run --mode test --seeds-filter gender        # restringe a un gruppo d
 ouroboros run --mode test --judge-backend ollama       # judge via Ollama invece di MLX
 ouroboros run --mode full --target-backend diffusers   # FLUX.2-klein su NVIDIA CUDA invece di mflux
 ouroboros run --mode full --target-backend qwen-image --no-aggressive-unload
-                                                       # secondo modello (Qwen-Image 20B) su NVIDIA CUDA
+                                                       # Qwen-Image-2.1: 40 step, 1024 px, 4-bit
 ouroboros run --resume <run_id>                        # riprende dopo interruzione
 ouroboros run --dry-run                                # elenca seed e crea run dir senza chiamate
 ```
+
+Per evitare di mescolare modelli, `meta.json` registra `target_model_id`: resume/replay dei vecchi run Qwen senza questo marker sono bloccati. Avviare un nuovo run per Qwen-Image-2.1; i risultati storici del 20B restano analizzabili.
 
 Analisi post-hoc:
 

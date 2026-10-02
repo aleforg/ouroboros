@@ -26,3 +26,6 @@ docs/sweep-candidates-stereotype-datasets.md
 
 # Bozza della richiesta a GitHub Support (contiene il contesto del rewrite, resta locale)
 .github-support-request.md
+
+# Snapshots/clones written by external coding agents
+.delta/

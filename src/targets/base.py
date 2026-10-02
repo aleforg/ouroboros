@@ -102,7 +102,7 @@ def build_target(
 
     ``flux``       — FLUX.2-klein-4B via mflux (Apple Silicon only).
     ``diffusers``  — FLUX.2-klein-4B via HuggingFace diffusers + NVIDIA CUDA.
-    ``qwen-image`` — Qwen-Image 20B via HuggingFace diffusers + NVIDIA CUDA.
+    ``qwen-image`` — Qwen-Image-2.1 via HuggingFace diffusers + NVIDIA CUDA.
 
     Both CUDA backends require ``pip install -e '.[diffusers]'``. Their heavy
     imports live inside the backend's ``_load()``, so constructing any target
@@ -154,5 +154,5 @@ def build_target(
         f"Unknown target backend {backend!r}. Supported: "
         "'flux' (FLUX.2-klein, Apple Silicon/mflux), "
         "'diffusers' (FLUX.2-klein, NVIDIA CUDA), "
-        "'qwen-image' (Qwen-Image 20B, NVIDIA CUDA)."
+        "'qwen-image' (Qwen-Image-2.1, NVIDIA CUDA)."
     )

@@ -437,6 +437,43 @@ Due conseguenze da mettere in conto:
 
 La dashboard resta volutamente **flux-only**: non espone un selettore di backend, i due target CUDA si raggiungono solo da CLI.
 
+#### Migrazione successiva: Qwen-Image 20B → Qwen-Image-2.1
+
+La sezione A.21 sopra descrive l'introduzione storica del 20B, non i parametri
+del target corrente. Il nome CLI **`qwen-image` resta invariato**, ma ora il
+checkpoint è [`Qwen/Qwen-Image-2.1`](https://huggingface.co/Qwen/Qwen-Image-2.1)
+e la pipeline è `QwenImage21Pipeline`: **visual transformer 7B + Qwen3-VL text
+encoder 8B**. Default **40 step / 1024 px / quantize 4**, senza CFG
+(`true_cfg_scale=1.0`, nessun negative prompt). La model card mostra 2048 px,
+ma è la risoluzione **massima**; 1024 è il default `output_resolution` della
+pipeline. 2048 px quadruplica i pixel per immagine (tempo di generazione,
+attivazioni in VRAM e input al judge) su un run che arriva a decine di migliaia
+di immagini, senza che la percezione del genere ne guadagni: resta
+raggiungibile con `--target-size 2048`.
+
+Le stime VRAM conservative **non misurate** sono **12 GB a 4-bit, 20 GB a
+8-bit, 36 GB in bf16**, più headroom per le attivazioni. Non sono una promessa
+di fit a 1024 px, né una misura dei tempi: occorre ripetere lo smoke test sulla
+GPU scelta. I numeri dei run storici del 20B non vengono rinominati né
+attribuiti al nuovo modello.
+
+I requisiti correnti sono **diffusers da git main** (la model card non garantisce
+una release compatibile), **transformers ≥5.17**, **torch ≥2.5**,
+**accelerate ≥1.1.0** e **bitsandbytes ≥0.46.1** per la quantizzazione
+(vedi [README](../README.md) per la discrepanza model card/runtime). L'extra `[diffusers]`
+fissa la revisione git upstream verificata
+`578c9b2c6636ab2424a0e56186268b83623656b2`: basta installare l'extra con Git
+disponibile, senza seguire un `main` mobile. La licenza è **Qwen Research**,
+non Apache. `scripts/run_full_cloud.sh` passa 1024 px per Qwen;
+`scripts/smoke_qwen.py` risolve i default con `resolve_target_params()` invece
+di duplicarli.
+
+`meta.json` registra **`target_model_id`**: resume/replay dei vecchi run Qwen
+senza quel marker sono bloccati per evitare che un run del 20B continui o venga
+rigenerato con il 2.1. Il fallback dei nomi `flux_*` descritto sopra non supera
+questo controllo d'identità; report e analisi dei risultati storici restano
+possibili. Per il nuovo modello si avvia un nuovo run.
+
 ### A.22 Il judge Ollama deve essere l'edizione *Instruct*, non *Thinking* ✦ FIX (v3.1)
 
 Qwen3-VL esiste in due edizioni, **Instruct** e **Thinking**, e su Ollama il tag nudo `qwen3-vl:8b` è la seconda. `JUDGE_OLLAMA_DEFAULT` puntava lì, mentre `JUDGE_MLX_DEFAULT` era già `Qwen3-VL-8B-Instruct-4bit`: i due backend del judge usavano pesi diversi a seconda della piattaforma, cosa che nessuno aveva notato perché il run FLUX passava `--judge-model qwen3-vl:8b-instruct` esplicitamente da riga di comando.

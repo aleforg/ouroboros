@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, timezone
 
-from ouroboros.config import RunConfig
+from ouroboros.config import RunConfig, validate_target_model_metadata
 from ouroboros.targets import build_target
 from ouroboros.storage import JSONLWriter, save_image, compute_sha256
 
@@ -22,6 +22,7 @@ async def run_replay(past_run_dir: Path, output_dir: Path) -> None:
         meta_data = json.load(f)
 
     cfg_dict = meta_data.get("config", {})
+    validate_target_model_metadata(cfg_dict)
 
     # Reconstruct the run config. The target params were named flux_* before the
     # second model family landed, so read the new key and fall back to the old
@@ -34,6 +35,7 @@ async def run_replay(past_run_dir: Path, output_dir: Path) -> None:
         attacker_model=cfg_dict.get("attacker_model", ""),
         # Without this the replay of a CUDA run silently falls back to mflux.
         target_backend=cfg_dict.get("target_backend", "flux"),
+        target_model_id=cfg_dict.get("target_model_id"),
         target_quantize=_target_param("target_quantize", "flux_quantize", 4),
         target_steps=_target_param("target_steps", "flux_steps", 4),
         target_width=_target_param("target_width", "flux_width", 512),

@@ -5,8 +5,8 @@
 # What it configures for THIS machine only (not committed to the repo):
 #   - target backend: diffusers (FLUX.2-klein-4B/CUDA) — mflux/MLX is Apple-only
 #     and cannot run here at all, so this is a hard requirement, not a choice.
-#     Override with OUROBOROS_TARGET_DEFAULT=qwen-image to make the 20B
-#     Qwen-Image target the flagless default instead.
+#     Override with OUROBOROS_TARGET_DEFAULT=qwen-image to make
+#     Qwen-Image-2.1 (7B visual + 8B text encoder) the flagless default instead.
 #   - judge backend: ollama / qwen3-vl:8b-instruct — replaces the repo's Mac-oriented
 #     "mlx" default so `ouroboros run` needs no --judge-backend flag here
 #     (mlx-vlm is darwin-gated in pyproject.toml and is not installed here).
@@ -34,6 +34,11 @@ echo "=== [2/5] Python env + package install ==="
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
+# Requires Git: [diffusers] pins an upstream git-main revision exposing
+# QwenImage21Pipeline (the model card does not guarantee a compatible release),
+# and installs transformers>=5.17, torch>=2.5, accelerate>=1.1.0 and
+# bitsandbytes>=0.46.1 for Qwen-Image-2.1 quantization; see README for the
+# model-card/runtime discrepancy.
 pip install -e ".[dev,diffusers]"
 pip install bitsandbytes   # needed for --target-quantize 4/8 (NF4 / int8)
 
@@ -110,22 +115,25 @@ machine only — this local patch to src/config.py is NOT meant to be
 committed/pushed (it would flip the default for the Mac dev setup too).
 
 Still pass these explicitly per run (not baked in as defaults):
-  --no-aggressive-unload   keeps attacker/target/judge resident (48GB VRAM
-                           is plenty; keeps models in GPU memory without swaps)
-  --target-size 1024       1024x1024, the native scale of both target models
+  --no-aggressive-unload   avoids reloading/requantizing after every batch;
+                           budget for target, Ollama and activation headroom
+  --target-size 1024       optional FLUX override (backend default: 512)
+  --target-size 1024       Qwen-Image-2.1 backend default; not a VRAM fit guarantee
 
   quantization differs per backend — pick the line for the target you use:
   --target-quantize 16     diffusers:  bfloat16 unquantized FLUX.2-klein-4B
                            (best quality, ~11GB VRAM, leaves ~37GB for Ollama)
   --target-quantize 4      qwen-image: NF4 on transformer + text encoder
-                           (~18GB VRAM; bf16 would be ~60GB and will NOT fit)
+                           conservative UNMEASURED estimates: 4-bit 12GB,
+                           8-bit 20GB, bf16 36GB + activation headroom
 
   Steps are backend-resolved, so leave --target-steps alone unless you mean it:
-  4 for the distilled klein, 50 for the undistilled Qwen-Image.
+  4 for the distilled klein, 40 for Qwen-Image-2.1 (no CFG/negative prompt).
+  Model: https://huggingface.co/Qwen/Qwen-Image-2.1 — Qwen Research license.
 
 Sanity check before the full run:
   source .venv/bin/activate
   python scripts/smoke_qwen.py --steps 4 --size 512   # target only, if using qwen-image
   ouroboros validate-judge --judge-backend ollama --sample 100 ...
-  ouroboros run --mode test --no-aggressive-unload --target-size 1024
+  ouroboros run --mode test --no-aggressive-unload   # backend-resolved size
 SUMMARY

@@ -7,10 +7,11 @@ without the attacker or the judge, so a failure here is unambiguously the target
 Run it once with cheap settings to check the plumbing, then with the defaults:
 
     python smoke_qwen.py --steps 4 --size 512   # fast, ugly images, proves it loads
-    python smoke_qwen.py                        # real config: 50 steps, 1024 px
+    python smoke_qwen.py                        # backend defaults: 40 steps, 1024 px
 
-Set HF_HOME to a big volume first — the checkpoint is ~57 GB (bitsandbytes
-quantizes at load time, so the full bf16 weights are downloaded regardless):
+Set HF_HOME to a big volume first — bitsandbytes quantizes at load time, so
+the full Qwen-Image-2.1 weights are downloaded regardless of quantization.
+The default 1024 px needs activation headroom; VRAM estimates are not a fit guarantee:
 
     export HF_HOME=/workspace/hf
 """
@@ -23,6 +24,7 @@ import pathlib
 import sys
 import time
 
+from ouroboros.config import resolve_target_params
 from ouroboros.targets import build_target
 
 PROMPT = "Photo portrait of a software engineer"
@@ -30,17 +32,17 @@ PROMPT = "Photo portrait of a software engineer"
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--steps", type=int, default=50)
-    ap.add_argument("--size", type=int, default=1024)
-    ap.add_argument("--quantize", type=int, default=4, help="4 = NF4, 8 = int8, other = bf16")
+    ap.add_argument("--steps", type=int, default=None, help="default: resolved by backend")
+    ap.add_argument("--size", type=int, default=None, help="default: resolved by backend")
+    ap.add_argument("--quantize", type=int, default=None, help="4 = NF4, 8 = int8, other = bf16; default: resolved by backend")
     ap.add_argument("--m", type=int, default=2, help="images to generate")
     ap.add_argument("--prompt", default=PROMPT)
     ap.add_argument("--out", default="smoke_out")
     ap.add_argument(
         "--offload", choices=["auto", "on", "off"], default="auto",
         help="CPU-offload the weights. 'auto' offloads only when VRAM is tight. "
-             "'on' is ~10x slower on a big card — use it to reproduce the "
-             "small-card path, not for real runs.",
+             "'on' forces the small-card path; measure its cost on Qwen-Image-2.1 "
+             "rather than reusing the previous model's timings.",
     )
     ap.add_argument(
         "--compile", choices=["off", "default", "reduce-overhead", "max-autotune"],
@@ -50,6 +52,10 @@ def main() -> int:
              "figure.",
     )
     args = ap.parse_args()
+    defaults = resolve_target_params("qwen-image")
+    args.steps, args.size, args.quantize = resolve_target_params(
+        "qwen-image", steps=args.steps, size=args.size, quantize=args.quantize,
+    )
 
     if args.offload != "auto":
         os.environ["OUROBOROS_QWEN_CPU_OFFLOAD"] = "1" if args.offload == "on" else "0"
@@ -76,7 +82,7 @@ def main() -> int:
 
     # Load explicitly, outside the generation timer. _load() is private, but
     # folding it into the per-image average is exactly the mistake that makes a
-    # run-cost estimate wrong: loading + NF4-quantizing a 20B pipeline is a
+    # run-cost estimate wrong: loading + NF4-quantizing a Qwen-Image-2.1 pipeline is a
     # one-off cost per process, while the loop pays the per-image cost 28k times.
     print("loading pipeline (one-off: download on first run, then quantization) …")
     t0 = time.monotonic()
@@ -118,20 +124,20 @@ def main() -> int:
     print(f"generate:  {elapsed:6.0f}s for {len(results)} images → {per_image:.0f}s each")
     print(f"peak VRAM: {peak:6.1f} GB")
 
-    # Two projections, because the worst case overstates by ~15x. The bound is
+    # Two volume projections, not a prediction of Qwen-Image-2.1 success. The bound is
     # 175 seeds × M=8 × max_iter=20, doubled by the matched baseline. The likely
     # figure comes from the realized volume of the FLUX full run
     # (results/2026-07-16_191548_eb25e79c): the attacker succeeded at a median of
     # 1 iteration, so only 1896 iterative + 1896 baseline images were ever made.
     # It assumes Qwen-Image yields as readily as FLUX — which the pilot measures,
     # and which is the single biggest unknown in any estimate here.
-    for label, images in (("likely (FLUX-realized volume)", 3_792),
+    for label, images in (("illustrative (FLUX-realized volume, not a Qwen forecast)", 3_792),
                           ("worst case (every seed to max_iter)", 56_000)):
         secs = images * per_image
         print(f"\n{label}: {images:,} images × {per_image:.0f}s = "
               f"{secs / 3600:.0f}h ({secs / 86_400:.1f} days) of target time, "
               "judge excluded.")
-    if args.steps != 50 or args.size != 1024:
+    if (args.steps, args.size, args.quantize) != defaults:
         print("NOTE: measured at non-default settings — re-run without flags "
               "for the number that actually applies to a real run.")
 

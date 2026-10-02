@@ -7,7 +7,7 @@
 #
 # Usage:
 #   scripts/run_full_cloud.sh                            # FLUX.2-klein (default)
-#   scripts/run_full_cloud.sh --backend qwen-image       # Qwen-Image 20B
+#   scripts/run_full_cloud.sh --backend qwen-image       # Qwen-Image-2.1
 #   scripts/run_full_cloud.sh <RUN_ID>                   # resume an interrupted run
 #   scripts/run_full_cloud.sh --backend qwen-image <RUN_ID>
 #
@@ -32,11 +32,12 @@ if [ "${1:-}" = "--backend" ]; then
   shift 2
 fi
 
-# Quantization is not shared between the two: klein-4B fits in bf16 with room to
-# spare, while Qwen-Image is 20B + a 7B text encoder — bf16 would be ~60 GB and
-# does not fit a 48 GB A6000, so it runs at NF4 on both components (~18 GB).
+# Qwen-Image-2.1 has a 7B visual transformer + an 8B Qwen3-VL text encoder.
+# Use NF4 on both components: conservative, unmeasured VRAM estimates are
+# 12 GB (4-bit), 20 GB (8-bit), 36 GB (bf16), plus activation headroom.
+# These are not a guarantee of fitting at 1024 px with Ollama also resident.
 # Steps are left to the per-backend default (config.TARGET_DEFAULTS): 4 for the
-# distilled klein, 50 for the undistilled Qwen-Image.
+# distilled klein, 40 for Qwen-Image-2.1 (no CFG).
 case "$BACKEND" in
   diffusers)  TARGET_ARGS=(--target-quantize 16 --target-size 1024) ;;
   qwen-image) TARGET_ARGS=(--target-quantize 4  --target-size 1024) ;;

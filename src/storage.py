@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ouroboros.config import RunConfig, config_hash
+from ouroboros.config import RunConfig, config_hash, validate_target_model_metadata
 
 
 def _run_id_from_cfg(cfg: RunConfig) -> str:
@@ -91,8 +91,15 @@ def record_resume(run_dir: Path, cfg: RunConfig, resumed_at: str) -> None:
     """
     meta_path = run_dir / "meta.json"
     if not meta_path.exists():
+        if cfg.target_backend == "qwen-image":
+            raise ValueError("Cannot resume Qwen without model metadata; start a new run.")
         return
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    original_config = meta.get("config", {})
+    validate_target_model_metadata(original_config)
+    if "qwen-image" in (original_config.get("target_backend"), cfg.target_backend):
+        if original_config.get("target_model_id") != cfg.target_model_id:
+            raise ValueError("Cannot change the Qwen target model when resuming; start a new run.")
     meta.setdefault("resumes", []).append(
         {
             "resumed_at": resumed_at,

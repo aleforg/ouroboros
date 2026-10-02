@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from ouroboros.baseline import baseline_batches_per_seed
 from ouroboros.config import RunConfig, config_hash
 from ouroboros.loop import _batches_from_run_jsonl
@@ -107,3 +109,36 @@ class TestRecordResume:
     def test_no_meta_is_a_no_op(self, tmp_path):
         record_resume(tmp_path, RunConfig(), "t1")
         assert not (tmp_path / "meta.json").exists()
+
+    def test_qwen_21_can_resume(self, tmp_path):
+        cfg = RunConfig(target_backend="qwen-image")
+        write_meta(
+            tmp_path, "run-1", cfg,
+            attacker_model="a", judge_model="j", judge_backend="ollama",
+            started_at="t0",
+        )
+        record_resume(tmp_path, cfg, "t1")
+        meta = json.loads((tmp_path / "meta.json").read_text())
+        assert meta["resumes"][0]["config"]["target_model_id"] == "Qwen/Qwen-Image-2.1"
+
+    @pytest.mark.parametrize("model_id", [None, "Qwen/Qwen-Image"])
+    def test_old_qwen_cannot_resume_and_metadata_stays_unchanged(self, tmp_path, model_id):
+        config = {"target_backend": "qwen-image"}
+        if model_id is not None:
+            config["target_model_id"] = model_id
+        path = tmp_path / "meta.json"
+        original = json.dumps({"config": config, "ended_at": "t0"})
+        path.write_text(original)
+
+        with pytest.raises(ValueError, match="original code and model"):
+            record_resume(tmp_path, RunConfig(target_backend="qwen-image"), "t1")
+        assert path.read_text() == original
+
+    def test_cannot_resume_flux_as_qwen(self, tmp_path):
+        (tmp_path / "meta.json").write_text(json.dumps({"config": {"target_backend": "flux"}}))
+        with pytest.raises(ValueError, match="Cannot change the Qwen target model"):
+            record_resume(tmp_path, RunConfig(target_backend="qwen-image"), "t1")
+
+    def test_qwen_requires_metadata_to_resume(self, tmp_path):
+        with pytest.raises(ValueError, match="without model metadata"):
+            record_resume(tmp_path, RunConfig(target_backend="qwen-image"), "t1")

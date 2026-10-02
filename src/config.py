@@ -73,12 +73,11 @@ MODEL_SIZE_REGISTRY: dict[str, float] = {
     "flux2-klein-4b-diffusers-q4": 3.5,
     "flux2-klein-4b-diffusers-q8": 6.5,
     "flux2-klein-4b-diffusers-bf16": 11.0,
-    # Qwen-Image targets (NVIDIA CUDA — VRAM, listed for reference).
-    # 20B MMDiT + Qwen2.5-VL-7B text encoder; both are quantized, so the
-    # 4-bit figure is what makes it fit on a 24 GB card.
-    "qwen-image-20b-q4": 18.0,
-    "qwen-image-20b-q8": 30.0,
-    "qwen-image-20b-bf16": 60.0,
+    # Qwen-Image-2.1: 7B visual transformer + Qwen3-VL-8B text encoder.
+    # Conservative weight/loading estimates, NOT measured peaks at 1024 px.
+    "qwen-image-2.1-q4": 12.0,
+    "qwen-image-2.1-q8": 20.0,
+    "qwen-image-2.1-bf16": 36.0,
 }
 
 RAM_BUDGET_GB: float = (
@@ -151,14 +150,17 @@ DEFAULT_RATE_LIMIT_PER_MIN = 60
 
 # Sampling defaults per target backend. They are NOT interchangeable: the two
 # FLUX.2-klein backends run a guidance-distilled model that is converged at 4
-# steps, while Qwen-Image is an undistilled 20B MMDiT whose reference config is
-# 50 steps at its native ~1k resolution. Applying klein's 4 steps to Qwen would
-# produce noise, so the CLI flags default to None and are resolved here against
-# the selected backend rather than against a single global constant.
+# steps, while Qwen-Image-2.1's reference config is 40 steps without
+# classifier-free guidance. 1024 px is the pipeline's own output_resolution
+# default; the model card's 2048 px is its maximum, at 4x the pixels per image.
+# CLI flags default to None and are resolved here against the selected backend
+# rather than a single global constant.
+QWEN_IMAGE_MODEL_ID = "Qwen/Qwen-Image-2.1"
+
 TARGET_DEFAULTS: dict[str, dict[str, int]] = {
     "flux": {"steps": 4, "size": 512, "quantize": 4},
     "diffusers": {"steps": 4, "size": 512, "quantize": 4},
-    "qwen-image": {"steps": 50, "size": 1024, "quantize": 4},
+    "qwen-image": {"steps": 40, "size": 1024, "quantize": 4},
 }
 
 
@@ -192,6 +194,9 @@ class RunConfig:
     # target — values here are already resolved against the backend
     # (see resolve_target_params), so meta.json records what actually ran.
     target_backend: Literal["flux", "diffusers", "qwen-image"] = TARGET_BACKEND_DEFAULT
+    # Version the Qwen weights in metadata/hash: the backend name alone used to
+    # mean Qwen-Image 20B. None remains valid for the unchanged FLUX backends.
+    target_model_id: str | None = None
     target_quantize: int = 4
     target_steps: int = 4
     target_width: int = 512
@@ -220,9 +225,27 @@ class RunConfig:
     google_cloud_project: str = ""
     google_cloud_location: str = ""
 
+    def __post_init__(self) -> None:
+        if self.target_backend == "qwen-image":
+            if self.target_model_id is None:
+                object.__setattr__(self, "target_model_id", QWEN_IMAGE_MODEL_ID)
+            elif self.target_model_id != QWEN_IMAGE_MODEL_ID:
+                raise ValueError(f"Unsupported Qwen target model: {self.target_model_id!r}")
+
     @property
     def budget(self) -> ModeBudget:
         return TEST_BUDGET if self.mode == "test" else FULL_BUDGET
+
+
+def validate_target_model_metadata(config: dict) -> None:
+    """Never resume/replay legacy Qwen rows with the replacement model."""
+    if config.get("target_backend") == "qwen-image":
+        if config.get("target_model_id") != QWEN_IMAGE_MODEL_ID:
+            raise ValueError(
+                "This Qwen run predates Qwen-Image-2.1 or uses different weights. "
+                "Resume/replay with the original code and model, or start a new run; "
+                "the current qwen-image backend must not mix models in one result."
+            )
 
 
 def config_hash(cfg: RunConfig) -> str:

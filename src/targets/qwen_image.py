@@ -1,4 +1,4 @@
-"""Qwen-Image via HuggingFace diffusers on NVIDIA CUDA.
+"""Qwen-Image-2.1 via HuggingFace diffusers on NVIDIA CUDA.
 
 Second T2I model family alongside FLUX.2-klein, so a measured skew can be
 attributed to a model rather than to the FLUX family. Cloud GPU only (RunPod,
@@ -14,31 +14,29 @@ import io
 import logging
 import os
 
+from ouroboros.config import MODEL_SIZE_REGISTRY, QWEN_IMAGE_MODEL_ID, TARGET_DEFAULTS
 from ouroboros.targets.base import CALL_SEED_STRIDE, SampleResult, call_seeds
 
 logger = logging.getLogger(__name__)
 
-_MODEL_ID = "Qwen/Qwen-Image"
+_MODEL_ID = QWEN_IMAGE_MODEL_ID
+_DEFAULTS = TARGET_DEFAULTS["qwen-image"]
 
-# Qwen-Image is not guidance-distilled: unlike klein (steps=4, guidance=1.0) it
-# needs real classifier-free guidance, which the pipeline exposes as
-# ``true_cfg_scale``. 4.0 with an empty negative prompt is the reference config
-# from the model card; the negative prompt is deliberately contentless so it
-# cannot steer demographics and confound the bias measurement.
-_TRUE_CFG_SCALE = 4.0
-_NEGATIVE_PROMPT = " "
+# 2.1 is sampled WITHOUT CFG. Do not carry over the old model's scale=4.0
+# or negative prompt: they change both the inference cost and the measurement.
+_TRUE_CFG_SCALE = 1.0
 
-# VRAM estimates: 20B MMDiT transformer + Qwen2.5-VL-7B text encoder + VAE.
-# Both transformer and text encoder are quantized, which is what makes the
-# 4-bit configuration fit on a 24 GB card.
-_VRAM_GB: dict[int, float] = {4: 18.0, 8: 30.0}
-_VRAM_BF16 = 60.0
+# Conservative estimates, not measured 1024px peaks. Quantize both the 7B
+# visual transformer and the Qwen3-VL-8B encoder; activations need extra room.
+_VRAM_GB = {
+    bits: MODEL_SIZE_REGISTRY[f"qwen-image-2.1-q{bits}"] for bits in (4, 8)
+}
+_VRAM_BF16 = MODEL_SIZE_REGISTRY["qwen-image-2.1-bf16"]
 
 # Headroom over the weight estimate for activations and fragmentation. Above
 # this the pipeline is kept resident on the GPU; below it, weights are offloaded
-# to system RAM. CPU offload costs real throughput on a quantized 20B — measured
-# ~100 s/image at 4 steps on a 48 GB A6000, ~10x what resident inference needs —
-# so it must be the fallback for small cards, never the default on a big one.
+# to system RAM. CPU offload trades throughput for memory; benchmark 2.1 with
+# smoke_qwen.py rather than reusing timings measured on the old 20B pipeline.
 _VRAM_HEADROOM_GB = 6.0
 
 # Escape hatch for benchmarking or a card whose free VRAM the auto-policy reads
@@ -55,20 +53,20 @@ _COMPILE_MODE_ENV = "OUROBOROS_QWEN_COMPILE_MODE"
 
 
 class QwenImageTarget:
-    """Qwen-Image (20B MMDiT) via diffusers + CUDA.
+    """Qwen-Image-2.1 (7B visual transformer) via diffusers + CUDA.
 
     Parameters
     ----------
     steps:
-        Inference steps. 50 is the reference value; Qwen-Image is undistilled,
-        so low step counts degrade badly.
+        Inference steps. 40 is the model card's reference value.
     width / height:
-        Output resolution in pixels. The model is trained around 1k, so 1024
-        is the default rather than klein's 512.
+        Output resolution in pixels. 1024 is the pipeline's default; the model
+        supports up to 2048, at 4x the pixels and a matching cost per image.
     quantize_bits:
-        4 → 4-bit NF4 on transformer + text encoder (~18 GB VRAM).
-        8 → 8-bit on both (~30 GB VRAM).
-        Anything else → bfloat16 full precision (~60 GB VRAM, A100 80GB class).
+        4 → 4-bit NF4 on transformer + text encoder (~12 GB).
+        8 → 8-bit on both (~20 GB).
+        Anything else → bfloat16 full precision (~36 GB).
+        These are conservative estimates, not measured peaks at 1024 px.
     seed_base:
         Base RNG seed; sample i uses seed_base + i * 1000.
 
@@ -82,10 +80,10 @@ class QwenImageTarget:
     def __init__(
         self,
         *,
-        steps: int = 50,
-        width: int = 1024,
-        height: int = 1024,
-        quantize_bits: int = 4,
+        steps: int = _DEFAULTS["steps"],
+        width: int = _DEFAULTS["size"],
+        height: int = _DEFAULTS["size"],
+        quantize_bits: int = _DEFAULTS["quantize"],
         seed_base: int = 42,
         call_seed_stride: int = CALL_SEED_STRIDE,
     ) -> None:
@@ -128,7 +126,7 @@ class QwenImageTarget:
         harmful with aggressive unload, where each batch would recompile.
 
         Dynamo errors are suppressed rather than raised: this is a speed knob,
-        and a graph break in a quantized 20B should degrade to eager execution,
+        and a graph break in the quantized model should degrade to eager execution,
         not turn a multi-day run into a batch of `SampleResult(outcome="error")`.
         """
         flag = os.environ.get(_COMPILE_ENV, "").strip()
@@ -165,7 +163,13 @@ class QwenImageTarget:
             return
 
         import torch
-        from diffusers import DiffusionPipeline
+        try:
+            from diffusers import QwenImage21Pipeline
+        except ImportError as exc:
+            raise ImportError(
+                "Qwen-Image-2.1 requires QwenImage21Pipeline. "
+                "Reinstall the updated extra: pip install -e '.[diffusers]'."
+            ) from exc
 
         logger.info(
             "Loading %s (quantize_bits=%d, steps=%d, %dx%d, true_cfg_scale=%.1f) …",
@@ -187,8 +191,8 @@ class QwenImageTarget:
             else:
                 quant_kwargs = {"load_in_8bit": True}
 
-            # Both components must be quantized: the Qwen2.5-VL-7B text encoder
-            # alone is ~15 GB in bfloat16, which would blow the VRAM budget even
+            # Both components must be quantized: the Qwen3-VL-8B text encoder
+            # alone is ~16 GB in bfloat16, which would blow the VRAM budget even
             # with a 4-bit transformer.
             quant_config = PipelineQuantizationConfig(
                 quant_backend=f"bitsandbytes_{self._quantize_bits}bit",
@@ -199,7 +203,7 @@ class QwenImageTarget:
             # the first pins the pipeline on the GPU, the second hands placement
             # to accelerate's hooks. A bitsandbytes-quantized pipeline cannot be
             # moved with .to("cuda") afterwards, so the choice is made here.
-            self._pipe = DiffusionPipeline.from_pretrained(
+            self._pipe = QwenImage21Pipeline.from_pretrained(
                 _MODEL_ID,
                 torch_dtype=torch.bfloat16,
                 quantization_config=quant_config,
@@ -209,13 +213,17 @@ class QwenImageTarget:
                 self._pipe.enable_model_cpu_offload()
 
         else:
-            self._pipe = DiffusionPipeline.from_pretrained(
+            self._pipe = QwenImage21Pipeline.from_pretrained(
                 _MODEL_ID,
                 torch_dtype=torch.bfloat16,
-            ).to("cuda")
+            )
+            if cpu_offload:
+                self._pipe.enable_model_cpu_offload()
+            else:
+                self._pipe.to("cuda")
 
         self._maybe_compile(cpu_offload)
-        logger.info("Qwen-Image loaded.")
+        logger.info("Qwen-Image-2.1 loaded.")
 
     # ------------------------------------------------------------------
     # TargetBackend protocol
@@ -249,7 +257,6 @@ class QwenImageTarget:
             try:
                 output = self._pipe(
                     prompt=prompt,
-                    negative_prompt=_NEGATIVE_PROMPT,
                     num_inference_steps=self._steps,
                     true_cfg_scale=_TRUE_CFG_SCALE,
                     width=self._width,
@@ -268,7 +275,7 @@ class QwenImageTarget:
         """Release GPU memory.
 
         Note this is expensive for Qwen-Image: the next generate_m re-downloads
-        nothing but does re-quantize a 20B transformer, which takes minutes.
+        nothing but does reload and re-quantize the transformer and text encoder.
         Prefer --no-aggressive-unload when running this backend; the CLI warns
         about it at startup.
 

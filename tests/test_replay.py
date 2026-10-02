@@ -160,6 +160,7 @@ async def test_replay_reuses_the_recorded_backend(mock_build_target, tmp_path):
     _write_minimal_run(past_run_dir, {
         "mode": "test",
         "target_backend": "qwen-image",
+        "target_model_id": "Qwen/Qwen-Image-2.1",
         "target_quantize": 4,
         "target_steps": 50,
         "target_width": 1024,
@@ -197,3 +198,20 @@ async def test_replay_reads_pre_rename_flux_params(mock_build_target, tmp_path):
     assert kwargs["target_steps"] == 6
     assert kwargs["target_width"] == 768
     assert kwargs["target_height"] == 768
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("model_id", [None, "Qwen/Qwen-Image"])
+@patch("ouroboros.replay.build_target")
+async def test_replay_rejects_old_qwen_before_loading(mock_build_target, model_id, tmp_path):
+    past_run_dir = tmp_path / "legacy_qwen"
+    config = {"target_backend": "qwen-image"}
+    if model_id is not None:
+        config["target_model_id"] = model_id
+    _write_minimal_run(past_run_dir, config)
+
+    with pytest.raises(ValueError, match="original code and model"):
+        await run_replay(past_run_dir, tmp_path / "replays")
+
+    mock_build_target.assert_not_called()
+    assert not (tmp_path / "replays").exists()
